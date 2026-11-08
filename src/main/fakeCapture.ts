@@ -7,7 +7,7 @@ import type { Capturer, GrayFrame } from './captureTypes';
 export const TINY_JPEG_BASE64 =
   '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
 
-export function createFakeCapturer(opts: { width?: number; height?: number; sourceName?: string } = {}): Capturer & { frameCalls: number } {
+export function createFakeCapturer(opts: { width?: number; height?: number; sourceName?: string; jpegBase64?: string } = {}): Capturer & { frameCalls: number } {
   const width = opts.width ?? 1280;
   const height = opts.height ?? 720;
   let tick = 0;
@@ -26,7 +26,7 @@ export function createFakeCapturer(opts: { width?: number; height?: number; sour
       const kind = sourceId.startsWith('window:') ? ('window' as const) : ('screen' as const);
       const size = { width, height };
       const r = {
-        jpegBase64: TINY_JPEG_BASE64,
+        jpegBase64: opts.jpegBase64 ?? TINY_JPEG_BASE64,
         imageSize: size,
         kind,
         geometry: { boundsDip: { x: 0, y: 0, width, height }, imageSize: size },

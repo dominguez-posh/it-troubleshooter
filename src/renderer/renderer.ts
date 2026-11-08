@@ -15,7 +15,7 @@ import {
   type TimeEntryDraft,
 } from '../shared/incident';
 import { buildTimeline } from '../shared/timeline';
-import type { AppError, CaptureSourceInfo, ModelTier, RendererApi, Result, SessionView, SettingsView } from '../shared/types';
+import type { AppError, CaptureSourceInfo, DocVariant, ModelTier, NormRect, RendererApi, Result, SessionView, SettingsView, ShotRef } from '../shared/types';
 import { renderCard, type CardHandlers } from '../ui/card';
 
 declare global {
@@ -192,6 +192,12 @@ function renderSession(): void {
     : '';
   renderActivity();
   renderCost();
+  const sh = v.shots;
+  $('shots-line').textContent = v.incidentId
+    ? sh.enabled
+      ? `● Screenshots werden lokal gespeichert (${sh.count}) – ${sh.encrypted ? 'verschlüsselt' : 'ACHTUNG: unverschlüsselt'}. Pro Incident abschaltbar im Incident-Dialog.${sh.error ? ` Fehler: ${sh.error}` : ''}`
+      : 'Screenshots werden für diesen Incident NICHT gespeichert.'
+    : '';
 }
 
 function renderActivity(): void {
@@ -380,7 +386,195 @@ async function openIncidentDialog(id: string): Promise<void> {
     o.textContent = STATUS_LABELS[st];
     sel.append(o);
   }
+  inp('id-store').checked = inc.storeShots;
+  await renderShots(inc.id, inc.shots);
   $<HTMLDialogElement>('inc-dialog').showModal();
+}
+
+// ---------- Screenshots, Schwärzen, Doku ----------
+async function thumb(incidentId: string, shotId: string, variant: 'original' | 'redacted' | 'export'): Promise<string | null> {
+  const r = await api.getShot(incidentId, shotId, variant);
+  return r.ok ? r.value : null;
+}
+
+async function renderShots(incidentId: string, shots: ShotRef[]): Promise<void> {
+  const box = $('id-shots');
+  box.replaceChildren();
+  $('id-shots-info').textContent = shots.length
+    ? `${shots.length} Screenshot(s) lokal gespeichert${shots.some((s) => !s.encrypted) ? ' – ACHTUNG: unverschlüsselt (Windows-Verschlüsselung nicht verfügbar)' : ' (verschlüsselt)'}. Sie können Passwörter oder Kundendaten zeigen.`
+    : 'Keine Screenshots gespeichert.';
+  for (const s of shots) {
+    const card = document.createElement('div');
+    card.className = 'shot';
+    const img = document.createElement('img');
+    img.alt = `Schritt ${s.stepIndex}`;
+    const src = await thumb(incidentId, s.id, s.redacted ? 'redacted' : 'original');
+    if (src) img.src = src;
+    const cap = document.createElement('div');
+    cap.textContent = `Schritt ${s.stepIndex}: ${s.text}${s.redacted ? ' (geschwärzt)' : ''}`;
+    const row = document.createElement('div');
+    row.className = 'row';
+    const keep = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = s.keep;
+    cb.addEventListener('change', async () => void api.setShotKeep(incidentId, s.id, cb.checked));
+    keep.append(cb, ' behalten');
+    const red = document.createElement('button');
+    red.type = 'button';
+    red.className = 'btn small';
+    red.textContent = 'Schwärzen …';
+    red.addEventListener('click', () => void openRedact(incidentId, s));
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'btn small';
+    del.textContent = 'Verwerfen';
+    del.addEventListener('click', async () => {
+      if (!window.confirm('Diesen Screenshot endgültig löschen?')) return;
+      const r = await api.discardShot(incidentId, s.id);
+      if (r.ok) await renderShots(incidentId, r.value);
+    });
+    row.append(keep, red, del);
+    card.append(img, cap, row);
+    box.append(card);
+  }
+}
+
+let redactCtx: { incidentId: string; shot: ShotRef; img: HTMLImageElement; rects: NormRect[] } | null = null;
+
+async function openRedact(incidentId: string, shot: ShotRef): Promise<void> {
+  const src = await thumb(incidentId, shot.id, shot.redacted ? 'redacted' : 'original');
+  if (!src) return setStatus($('id-status'), 'error', 'Das Bild konnte nicht geladen werden.');
+  const img = new Image();
+  img.onload = () => {
+    redactCtx = { incidentId, shot, img, rects: [] };
+    const c = $<HTMLCanvasElement>('red-canvas');
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    drawRedact();
+    setStatus($('red-status'), null);
+    $<HTMLDialogElement>('red-dialog').showModal();
+  };
+  img.src = src;
+}
+
+function drawRedact(live?: NormRect): void {
+  if (!redactCtx) return;
+  const c = $<HTMLCanvasElement>('red-canvas');
+  const g = c.getContext('2d')!;
+  g.drawImage(redactCtx.img, 0, 0);
+  g.fillStyle = 'rgba(0,0,0,0.85)';
+  for (const r of [...redactCtx.rects, ...(live ? [live] : [])]) g.fillRect(r.x * c.width, r.y * c.height, r.w * c.width, r.h * c.height);
+}
+
+function wireRedact(): void {
+  const c = $<HTMLCanvasElement>('red-canvas');
+  let start: { x: number; y: number } | null = null;
+  const pos = (e: MouseEvent) => {
+    const b = c.getBoundingClientRect();
+    return { x: Math.min(1, Math.max(0, (e.clientX - b.left) / b.width)), y: Math.min(1, Math.max(0, (e.clientY - b.top) / b.height)) };
+  };
+  const rect = (a: { x: number; y: number }, b: { x: number; y: number }): NormRect => ({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(a.x - b.x), h: Math.abs(a.y - b.y) });
+  c.addEventListener('mousedown', (e) => (start = pos(e)));
+  c.addEventListener('mousemove', (e) => start && drawRedact(rect(start, pos(e))));
+  window.addEventListener('mouseup', (e) => {
+    if (!start || !redactCtx) return;
+    const r = rect(start, pos(e));
+    start = null;
+    if (r.w > 0.005 && r.h > 0.005) redactCtx.rects.push(r);
+    drawRedact();
+  });
+  $('red-undo').addEventListener('click', () => {
+    redactCtx?.rects.pop();
+    drawRedact();
+  });
+  $('red-apply').addEventListener('click', async () => {
+    if (!redactCtx || redactCtx.rects.length === 0) return setStatus($('red-status'), 'error', 'Bitte mindestens einen Bereich markieren.');
+    const { incidentId, shot, rects } = redactCtx;
+    const r = await api.redactShot(incidentId, shot.id, rects);
+    if (!r.ok) return setStatus($('red-status'), 'error', r.error.message);
+    $<HTMLDialogElement>('red-dialog').close();
+    await renderShots(incidentId, r.value);
+  });
+}
+
+async function loadDocPreview(): Promise<void> {
+  if (!openIncident) return;
+  const id = openIncident.id;
+  const variant = $<HTMLSelectElement>('doc-variant').value as DocVariant;
+  setStatus($('doc-status'), 'loading', 'Text wird vorbereitet (nur Textverlauf, kleine Modellstufe, keine Bilder) …');
+  const r = await api.prepareDoc(id, variant);
+  if (!r.ok) return setStatus($('doc-status'), 'error', r.error.message);
+  setStatus($('doc-status'), null);
+  const d = r.value;
+  if (!$<HTMLTextAreaElement>('doc-summary').value.trim() || !openDocEdited) $<HTMLTextAreaElement>('doc-summary').value = d.summary;
+  const steps = $('doc-steps');
+  steps.replaceChildren();
+  for (const s of d.steps) {
+    const l = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = true;
+    cb.dataset['n'] = String(s.index);
+    cb.addEventListener('change', () => void refreshDocImages());
+    l.append(cb, ` ${s.index}. ${s.text}${s.shotId ? ' 🖼' : ''}`);
+    steps.append(l);
+  }
+  await refreshDocImages();
+}
+let openDocEdited = false;
+
+async function refreshDocImages(): Promise<void> {
+  if (!openIncident) return;
+  const id = openIncident.id;
+  const variant = $<HTMLSelectElement>('doc-variant').value;
+  const box = $('doc-preview');
+  box.replaceChildren();
+  if (variant === 'short') return;
+  const chosen = new Set([...document.querySelectorAll<HTMLInputElement>('#doc-steps input:checked')].map((c) => Number(c.dataset['n'])));
+  const shots = await api.listShots(id);
+  if (!shots.ok) return;
+  for (const s of shots.value.filter((x) => x.keep && chosen.has(x.stepIndex))) {
+    const src = await thumb(id, s.id, 'export'); // Vorschau = genau das, was exportiert wird
+    if (!src) continue;
+    const card = document.createElement('div');
+    card.className = 'shot';
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = `Schritt ${s.stepIndex}`;
+    const cap = document.createElement('div');
+    cap.textContent = `Schritt ${s.stepIndex}${s.redacted ? ' (geschwärzt)' : ' (NICHT geschwärzt)'}`;
+    card.append(img, cap);
+    box.append(card);
+  }
+}
+
+function wireDocs(): void {
+  wireRedact();
+  $('id-store').addEventListener('change', async () => {
+    if (!openIncident) return;
+    await api.setStoreShots(openIncident.id, inp('id-store').checked);
+  });
+  $('id-shots-del').addEventListener('click', async () => {
+    if (!openIncident || !window.confirm('Alle Screenshots dieses Incidents endgültig löschen?')) return;
+    const r = await api.deleteIncidentShots(openIncident.id);
+    if (r.ok) await renderShots(openIncident.id, r.value);
+  });
+  $('id-doc').addEventListener('click', async () => {
+    openDocEdited = false;
+    $<HTMLTextAreaElement>('doc-summary').value = '';
+    $<HTMLDialogElement>('doc-dialog').showModal();
+    await loadDocPreview();
+  });
+  $('doc-summary').addEventListener('input', () => (openDocEdited = true));
+  $('doc-variant').addEventListener('change', () => void refreshDocImages());
+  $('doc-export').addEventListener('click', async () => {
+    if (!openIncident) return;
+    const steps = [...document.querySelectorAll<HTMLInputElement>('#doc-steps input:checked')].map((c) => Number(c.dataset['n']));
+    const r = await api.exportDoc(openIncident.id, { variant: $<HTMLSelectElement>('doc-variant').value as DocVariant, steps, summary: $<HTMLTextAreaElement>('doc-summary').value });
+    if (!r.ok) return setStatus($('doc-status'), 'error', r.error.message);
+    setStatus($('doc-status'), 'info', r.value ? `Exportiert: ${r.value.files} Dateien in ${r.value.dir}` : 'Export abgebrochen.');
+  });
 }
 
 async function resumeFlow(inc: Incident): Promise<void> {
@@ -442,6 +636,7 @@ function renderSettings(): void {
   inp('chk-call-shortcut').checked = s.callShortcut;
   inp('chk-pill').checked = s.activityPill;
   inp('chk-auto').checked = s.autoAdvance;
+  inp('shot-days').value = String(s.shotRetentionDays);
 }
 
 function applySettings(r: Result<SettingsView>): boolean {
@@ -486,6 +681,12 @@ function wireSettings(): void {
   inp('chk-call-shortcut').addEventListener('change', () => void upd({ callShortcut: inp('chk-call-shortcut').checked }));
   inp('chk-pill').addEventListener('change', () => void upd({ activityPill: inp('chk-pill').checked }));
   inp('chk-auto').addEventListener('change', () => void upd({ autoAdvance: inp('chk-auto').checked }));
+  inp('shot-days').addEventListener('change', () => void upd({ shotRetentionDays: Number(inp('shot-days').value) }));
+  $('shots-delete-all').addEventListener('click', async () => {
+    if (!window.confirm('ALLE gespeicherten Screenshots aller Incidents endgültig löschen?')) return;
+    const r = await api.deleteAllShots();
+    setStatus($('settings-status'), r.ok ? 'info' : 'error', r.ok ? `${r.value} Screenshots gelöscht.` : r.error.message);
+  });
   $('btn-save-key').addEventListener('click', async () => {
     if (!settings) return;
     const r = await api.setApiKey(settings.providerId, inp('key-input').value);
@@ -669,6 +870,7 @@ function wireMain(): void {
 async function init(): Promise<void> {
   wireSettings();
   wireMain();
+  wireDocs();
   api.onSessionChanged((v) => setView(v));
   settings = await api.getSettings();
   renderSettings();

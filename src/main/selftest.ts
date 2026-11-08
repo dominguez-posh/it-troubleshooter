@@ -6,6 +6,12 @@ import type { IncidentManager } from './incidents';
 import type { OverlayWindow } from './overlay';
 import type { SessionService } from './session';
 import type { SettingsStore } from './settings';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { buildDocModel, writeDocPackage } from './docs';
+import { electronImageOps } from './imageOps';
+import type { ShotStore } from './shots';
 
 interface Ctx {
   win: BrowserWindow;
@@ -15,6 +21,7 @@ interface Ctx {
   sessions: SessionService;
   incidents: IncidentManager;
   capturer: Capturer;
+  shotStore: ShotStore;
 }
 
 /**
@@ -76,6 +83,25 @@ export async function runSelfTest(c: Ctx): Promise<void> {
     out['chatHeights'] = [h0, h1, h2];
     check(h1 > h0 && Math.abs(h2 - h0) <= 3, 'chat-verlauf-klappt-und-schrumpft-zurueck');
 
+    // 3b. Screenshots (simulierte Frames): lokal gespeichert, lesbar, Schwärzen und Doku-Export im temporären Ordner
+    const pre = c.incidents.list()[0]!;
+    const refs = c.incidents.shotRefs(pre.id);
+    out['shots'] = refs.length;
+    check(refs.length >= 3, 'screenshots-pro-schritt-gespeichert');
+    const first = refs[0]!;
+    const raw = c.shotStore.read(pre.id, first, 'original');
+    check(raw.length > 0, 'screenshot-lesbar-und-entschluesselt');
+    check(refs.every((r) => r.encrypted === c.shotStore.encryptionAvailable), 'verschluesselung-wie-erwartet');
+    const red = c.shotStore.redact(pre.id, first, [{ x: 0, y: 0, w: 1, h: 1 }], electronImageOps);
+    c.incidents.replaceShot(pre.id, red);
+    check(c.shotStore.read(pre.id, red, 'original').equals(raw) && c.shotStore.read(pre.id, red, 'redacted').length > 0, 'schwaerzen-original-bleibt');
+    const inc0 = c.incidents.get(pre.id);
+    const model = buildDocModel(inc0, { variant: 'full', steps: [1, 2, 3], summary: 'Selbsttest' }, (r) => c.shotStore.exportImage(pre.id, r, electronImageOps), Date.now());
+    const pkg = writeDocPackage(mkdtempSync(join(tmpdir(), 'itt-doc-')), 'Selbsttest-Doku', model, false);
+    out['docFiles'] = pkg.files;
+    check(pkg.files >= 3, 'doku-export');
+    rmSync(join(pkg.dir, '..'), { recursive: true, force: true });
+
     // 4. Abschluss -> Zeiterfassungs-Dialog -> speichern
     await js('document.getElementById("btn-solved").click()');
     check(await waitFor('document.getElementById("time-dialog").open && document.getElementById("td-desc").value.length > 0'), 'zeit-dialog-mit-zusammenfassung');
@@ -110,10 +136,6 @@ export async function runSelfTest(c: Ctx): Promise<void> {
   const json = JSON.stringify(out, null, 2);
   if (file) writeFileSync(file, json);
   console.log(json);
-  try {
-    rmSync(app.getPath('userData'), { recursive: true, force: true });
-  } catch {
-    // Aufräumen ist best effort
-  }
-  app.exit(checks.some((x) => x.startsWith('FEHLER')) ? 1 : 0);
+  process.env['ITT_SELFTEST_CODE'] = checks.some((x) => x.startsWith('FEHLER')) ? '1' : '0';
+  app.quit();
 }

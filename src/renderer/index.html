@@ -39,8 +39,8 @@
       <section id="view-session">
         <p class="notice">
           Hinweis: Erst wenn Fernwartung nötig ist, wird bei jedem Schritt ein Screenshot der gewählten Quelle an den eingestellten Anbieter gesendet
-          (vorher nicht). Screenshots werden nicht auf der Festplatte gespeichert. Texte und Verlauf eines Falls liegen lokal im Klartext in
-          Ihrem Benutzerordner. Bitte keine Passwörter eingeben. Kosten werden nur geschätzt.
+          (vorher nicht). Screenshots werden an den Anbieter gesendet UND lokal im Benutzerordner gespeichert (pro Incident abschaltbar,
+          Aufbewahrungsfrist einstellbar). Texte und Verlauf eines Falls liegen lokal im Klartext in Ihrem Benutzerordner. Bitte keine Passwörter eingeben. Kosten werden nur geschätzt.
         </p>
 
         <section id="setup-panel" class="card">
@@ -80,6 +80,7 @@
           <label for="note">Zusatzinfo / Antwort des Kunden (gehört zum Fall)</label>
           <div class="row"><input id="note" type="text" maxlength="1000" autocomplete="off" /><button id="btn-note" class="btn small" type="button">Senden</button></div>
           <p id="req-line" class="muted"></p>
+          <p id="shots-line" class="muted"></p>
         </section>
 
         <section id="solved-panel" class="card solved" hidden>
@@ -197,6 +198,12 @@
           <button id="cost-reset" class="btn small" type="button">Zähler zurücksetzen</button>
         </div>
         <p class="muted">Berechnet aus den Usage-Angaben der API und einer lokalen Preistabelle. Das ist eine Schätzung, keine Rechnung.</p>
+        <h3>Screenshots</h3>
+        <div class="grid3">
+          <label>Aufbewahrung (Tage, danach automatisch gelöscht)<input id="shot-days" type="number" min="1" max="3650" /></label>
+          <button id="shots-delete-all" class="btn small" type="button">Alle Screenshots löschen …</button>
+        </div>
+        <p class="muted">Screenshots werden bei Fernwartung an den Anbieter gesendet UND lokal (verschlüsselt, wenn Windows das erlaubt) gespeichert.</p>
         <h3>Fenster und Bedienung</h3>
         <label class="check"><input id="chk-exclude" type="checkbox" /> Dieses Fenster aus Aufnahmen ausblenden</label>
         <label class="check"><input id="chk-chat-shortcut" type="checkbox" /> Globales Kürzel Strg+Alt+Leertaste (Chat fokussieren)</label>
@@ -245,6 +252,14 @@
         <ol id="id-history" class="history"></ol>
         <h3>Zusatzinfos</h3>
         <ul id="id-infos" class="history"></ul>
+        <h3>Screenshots</h3>
+        <label class="check"><input id="id-store" type="checkbox" /> Screenshots dieses Incidents lokal speichern</label>
+        <p class="muted" id="id-shots-info"></p>
+        <div id="id-shots" class="shots-grid"></div>
+        <div class="row">
+          <button id="id-shots-del" class="btn small" type="button">Screenshots dieses Incidents löschen …</button>
+          <button id="id-doc" class="btn small primary" type="button">Doku erstellen …</button>
+        </div>
         <h3>Zeitabschnitte</h3>
         <ul id="id-segments" class="history"></ul>
         <h3>Wiedereröffnungen</h3>
@@ -258,6 +273,43 @@
           <select id="id-setstatus"></select>
           <button id="id-delete" class="btn" type="button">Löschen …</button>
           <button id="id-close" class="btn ghost" value="close">Schließen</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="doc-dialog">
+      <form method="dialog" class="dialog-body">
+        <h2>Doku erstellen</h2>
+        <label for="doc-variant">Variante</label>
+        <select id="doc-variant">
+          <option value="full">Ausführlich (mit Bildern)</option>
+          <option value="short">Kurz-Doku (ohne Bilder)</option>
+          <option value="customer">Kundenfassung (ohne interne Notizen, Modell- und Kosteninfos)</option>
+        </select>
+        <h3>Schritte in der Doku</h3>
+        <div id="doc-steps"></div>
+        <label for="doc-summary">Ursache und Lösung (editierbar, vom Modell nur aus dem Textverlauf erzeugt)</label>
+        <textarea id="doc-summary" rows="5" maxlength="4000"></textarea>
+        <p class="notice">Bitte Screenshots auf sensible Daten prüfen (Passwörter, Kundendaten, Schlüssel). Exportiert wird die geschwärzte Kopie, falls vorhanden.</p>
+        <div id="doc-preview" class="shots-grid"></div>
+        <div id="doc-status" class="status" hidden></div>
+        <div class="actions">
+          <button id="doc-export" class="btn primary" type="button">Exportieren (Markdown und HTML) …</button>
+          <button class="btn ghost" value="close">Schließen</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="red-dialog">
+      <form method="dialog" class="dialog-body">
+        <h2>Schwärzen</h2>
+        <p class="muted">Bereiche mit der Maus aufziehen. Beim Anwenden werden die Pixel in einer Kopie unwiderruflich überschrieben; das Original bleibt unverändert, die Doku nutzt nur die geschwärzte Kopie.</p>
+        <canvas id="red-canvas" aria-label="Screenshot zum Schwärzen"></canvas>
+        <div id="red-status" class="status" hidden></div>
+        <div class="actions">
+          <button id="red-undo" class="btn" type="button">Letzten Bereich entfernen</button>
+          <button id="red-apply" class="btn primary" type="button">Schwärzung anwenden</button>
+          <button class="btn ghost" value="close">Schließen</button>
         </div>
       </form>
     </dialog>

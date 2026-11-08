@@ -118,6 +118,38 @@ Screenshots ausgeschlossen. Sie müssen daher vor der Aufnahme nicht ausgeblende
 ausgeblendet). Wirksamkeit ist nur auf Windows 10 2004+ garantiert und wurde von mir **nicht** live gegen eine echte Aufnahme geprüft. Hinweis:
 Das gilt auch für andere Aufnahmen – Fernwartungssoftware überträgt diese Fenster dadurch vermutlich ebenfalls nicht.
 
+## Dokumentation & Datenschutz
+
+**Screenshots werden an den Anbieter gesendet UND lokal gespeichert** (Standard: an, pro Incident abschaltbar; die Statuszeile zeigt
+"Screenshots werden lokal gespeichert"). Gespeichert wird pro Schritt der Fernwartung genau das Bild, das das Modell bekam (gleiche Qualität,
+nie größer), unter `%APPDATA%\<App>\incidents\<id>\shots\`, zusammen mit Pfeilziel, Text, Zeitstempel, Quelle (Bildschirm/Fenstertitel) und
+Ergebnis des Schritts. Im Incident stehen nur Verweise (Kennung, Prüfsumme), nie Bilddaten. **Screenshots können Passwörter, Kundendaten und
+Schlüssel zeigen** – bitte nur speichern, was Sie behalten dürfen.
+
+- **Verschlüsselung:** AES-256-GCM mit einem zufälligen Dateischlüssel, der selbst per Electron `safeStorage` (Windows-Benutzerschlüssel/DPAPI)
+  geschützt in `shots.key` liegt. Das ist hier sinnvoll machbar (die Bilder werden nur über die App gelesen, Suche und Backup der Texte bleiben
+  unberührt) und schützt abgelegte Bilder vor Zugriff aus anderen Benutzerkonten, Backups auf fremden Datenträgern und versehentlichem Teilen des
+  Ordners. Es schützt **nicht** vor Schadsoftware im selben Benutzerkonto. Ist `safeStorage` nicht verfügbar, werden Bilder im **Klartext**
+  gespeichert und die UI zeigt "unverschlüsselt". Ein Wechsel des Windows-Profils macht gespeicherte Bilder unlesbar (der Schlüssel ist
+  profilgebunden). Die Incident-Texte (`incidents.json`) bleiben bewusst Klartext (siehe oben).
+- **Aufbewahrung:** einstellbar (Standard 30 Tage), abgelaufene Bilder werden beim Start und stündlich automatisch gelöscht. Löschen pro
+  Screenshot ("Verwerfen"), pro Incident ("Screenshots dieses Incidents löschen") und für alle (Einstellungen). Beim Löschen eines Incidents
+  werden auch seine Bilder gelöscht. Pro Schritt gibt es "behalten" (für die Doku).
+- **Schwärzen:** Im Incident-Dialog Rechtecke aufziehen; die Pixel werden in einer **Kopie unwiderruflich überschrieben** (neu kodiert, keine
+  Ebene). Das Original bleibt unverändert, der Doku-Export verwendet nur die geschwärzte Kopie.
+- **Doku erstellen** (pro Incident, auch für abgeschlossene oder wiedereröffnete): Varianten *Kurz* (ohne Bilder), *Ausführlich* (mit Bildern,
+  internen Notizen, Befehlen, Zeitaufwand, Technik) und *Kundenfassung* (ohne interne Notizen, Befehle, Zeit, Modell- und Kosteninfos);
+  Schritte einzeln wählbar. Ursache und Lösung erzeugt die kleine Modellstufe **nur aus dem Textverlauf (keine Bilder werden erneut gesendet)**,
+  Kosten fließen in Limit und Anzeige ein; der Text ist vor dem Export editierbar. Vor dem Export zeigt die UI alle Bilder (mit eingebranntem
+  Zielring, geschwärzt oder "NICHT geschwärzt") und den Hinweis, sie auf sensible Daten zu prüfen. Ausgabe: Ordner mit `doku.md` + `images/` und
+  `doku.html` mit eingebetteten Bildern (Zielordner per Dialog, Überschreiben nur nach Bestätigung).
+- **Export-Sicherheit:** Dateinamen werden bereinigt (kein Path Traversal, keine reservierten Windows-Namen), Pfade bleiben innerhalb des gewählten
+  Ordners, HTML wird escaped und trägt eine CSP ohne Skripte, Markdown entschärft HTML und Zeilenstrukturen aus Fremdtext, Bildpfade sind relativ.
+- **Zugriffsschutz in der App:** Der Renderer nennt nur validierte Kennungen (nie Pfade); Incident- und Screenshot-IDs werden streng geprüft, alle
+  Pfade werden aus ihnen im Incident-Ordner gebildet; Bilder gehen nur als begrenzte data-URL (max. 8 MB) über IPC.
+- **Backup/Sync:** Die Daten liegen in `userData`, nicht im Repo. Wird dieser Ordner gesichert oder synchronisiert, liegen die (verschlüsselten)
+  Bilder dort mit; ohne den profilgebundenen Schlüssel sind sie nicht lesbar. Der Aktivitätsprotokoll-Text enthält nie Bildinhalte.
+
 ## Auto-Weiter (optional, Standard aus)
 
 Der Supporter bleibt in der Ziel-App; das Tool erkennt per Vordergrundfenster (Titel/Prozessname via GetForegroundWindow) und Bildvergleich (kleine
@@ -132,8 +164,8 @@ manuell. Standard bleibt Schritt für Schritt mit Bestätigung.
   eigenen Fenster akzeptiert, alle Parameter geprüft.
 - API-Keys: nur im Hauptprozess, mit `safeStorage` verschlüsselt in `userData`, nie im Renderer, nie in Logs, nie im Repo. Ist keine
   Verschlüsselung verfügbar, wird nichts gespeichert.
-- **Screenshots werden bei Fernwartung an den gewählten Anbieter gesendet, aber nicht auf der Festplatte gespeichert** (nur im Speicher).
-  Vor "Fernwartung" geht kein Screenshot an den Anbieter. Texte (Problem, Verlauf, Zusatzinfos) werden gesendet; Eingaben werden gekürzt und
+- **Screenshots werden bei Fernwartung an den gewählten Anbieter gesendet UND lokal gespeichert** (siehe "Dokumentation & Datenschutz").
+  Vor "Fernwartung" wird kein Screenshot aufgenommen oder gesendet. Texte (Problem, Verlauf, Zusatzinfos) werden gesendet; Eingaben werden gekürzt und
   Tags entschärft (Schutz vor Prompt-Injection), sind aber kein Ersatz für eine Prüfung: bitte keine Passwörter oder unnötige Kundendaten eingeben.
 - Benutzerdaten liegen unter `%APPDATA%` (userData), nicht im Repo; `.gitignore` schließt `node_modules`, `dist`, `out` aus.
 
@@ -144,7 +176,7 @@ Statusmaschine, Zeitmessung (Fake-Zeit), CSV-Export, Aktivitätszustände, Bildv
 
 **Wichtig – keine echte Bildschirmaufnahme in Tests:** Tests und der Selbsttest nutzen eine **simulierte Aufnahmequelle** (Fake-Frames). Der
 Selbsttest läuft in einem temporären Datenordner und berührt keine echten Fälle. Eine echte Aufnahme im Selbsttest gibt es nur bei
-ausdrücklichem Opt-in (`ITT_SELFTEST_CAPTURE=1`) und nur mit Erlaubnis des Nutzers; Bilder werden nie auf Platte geschrieben.
+ausdrücklichem Opt-in (`ITT_SELFTEST_CAPTURE=1`) und nur mit Erlaubnis des Nutzers. Der Selbsttest legt höchstens simulierte Bilder in seinem temporären Ordner ab, der danach gelöscht wird.
 
 ```powershell
 npm run build
@@ -168,5 +200,5 @@ Neuen Anbieter ergänzen: `ProviderDefinition` (`src/main/llm/types.ts`) mit `re
 
 ## Noch nicht umgesetzt
 
-Siehe Abschlussbericht und `docs/`: Speichern und Dokumentieren von Screenshots (Doku-Export), die Anbieter `claude-cli`,
-`copilot-cli` und `m365-copilot` (Spikes sind dokumentiert, die Adapter sind nicht gebaut). Bis dahin gilt: Screenshots werden nicht gespeichert.
+Die Anbieter `claude-cli`, `copilot-cli` und `m365-copilot` (Spikes siehe `docs/`; die Adapter sind nicht gebaut und warten auf die
+Freigabe der IT). Weitere Doku-Formate (DOCX, PDF) sind nur als Renderer-Schnittstelle (`DocRenderer`) vorbereitet.

@@ -117,3 +117,10 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
 .pre { white-space: pre-wrap; }
 details.card summary { cursor: pointer; font-weight: 600; }
 .history .fail { color: var(--err); }
+.shots-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 6px 0; }
+.shot { border: 1px solid var(--line); border-radius: 8px; padding: 4px; background: var(--bg); font-size: 12px; }
+.shot img { width: 100%; display: block; border-radius: 4px; }
+.shot .row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+#red-canvas { max-width: 100%; border: 1px solid var(--line); cursor: crosshair; display: block; }
+#doc-steps label { display: block; font-weight: 500; margin: 2px 0; }
+.rec-dot { color: var(--err); font-weight: 600; }

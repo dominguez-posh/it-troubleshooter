@@ -1,9 +1,10 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, safeStorage, session, shell, type IpcMainInvokeEvent } from 'electron';
-import { mkdtempSync } from 'node:fs';
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, nativeImage, safeStorage, session, shell, type IpcMainInvokeEvent } from 'electron';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describeActivity } from '../shared/activityText';
 import { fallbackSummary } from '../shared/timeEntry';
+import type { DocPreview, DocRequest, DocVariant, ShotRef } from '../shared/types';
 import { MANUAL_STATUSES, type IncidentStatus, type TimeEntryDraft, type TimeEntryStatus } from '../shared/incident';
 import {
   IPC,
@@ -31,6 +32,9 @@ import { createDefaultRegistry, LlmError } from './llm';
 import { OverlayWindow } from './overlay';
 import { SessionService, toAppError } from './session';
 import { CALL_SHORTCUT, CHAT_SHORTCUT, SettingsStore } from './settings';
+import { buildDocModel, writeDocPackage } from './docs';
+import { electronImageOps } from './imageOps';
+import { checkIncidentId, checkShotId, MAX_IMAGE_BYTES, ShotCrypto, ShotStore, validateRects } from './shots';
 
 void ActivityTracker;
 
@@ -45,14 +49,32 @@ let settings: SettingsStore;
 let sessions: SessionService;
 let incidents: IncidentManager;
 let cost: CostGuard;
+let shotStore: ShotStore;
 const overlay = new OverlayWindow();
 let chat: ChatWindow;
 let heartbeat: ReturnType<typeof setInterval> | null = null;
 let pillTimer: ReturnType<typeof setInterval> | null = null;
+let purgeTimer: ReturnType<typeof setInterval> | null = null;
 
 /** Echte Aufnahme nur im normalen Betrieb. Selbsttest: Fake-Frames, außer ITT_SELFTEST_CAPTURE=1 (ausdrückliches Opt-in). */
 const useFakeCapture = process.env['ITT_SELFTEST'] === '1' && process.env['ITT_SELFTEST_CAPTURE'] !== '1';
-const capturer: Capturer = useFakeCapture ? createFakeCapturer() : electronCapturer;
+/** Synthetisches Testbild (Farbverlauf) – ohne jede Bildschirmaufnahme. */
+function syntheticJpegBase64(): string {
+  const w = 160;
+  const h = 90;
+  const buf = Buffer.alloc(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      buf[i] = (x * 255) / w;
+      buf[i + 1] = (y * 255) / h;
+      buf[i + 2] = 128;
+      buf[i + 3] = 255;
+    }
+  }
+  return nativeImage.createFromBitmap(buf, { width: w, height: h }).toJPEG(70).toString('base64');
+}
+const capturer: Capturer = useFakeCapture ? createFakeCapturer({ width: 160, height: 90, jpegBase64: syntheticJpegBase64() }) : electronCapturer;
 
 function userError(e: unknown): AppError {
   return toAppError(e);
@@ -246,8 +268,109 @@ function registerIpc(): void {
   });
   hv(IPC.setIncidentDuration, 'main', (_e, id, minutes) => incidents.setDuration(str(id, 60), Number(minutes)));
   hv(IPC.deleteIncident, 'main', (_e, id) => {
-    incidents.delete(str(id, 60));
+    const i = checkIncidentId(id);
+    incidents.delete(i);
+    shotStore.deleteIncident(i); // Löschen des Incidents löscht auch alle Bilder
     return null;
+  });
+
+  // ----- Screenshots: nur über validierte Kennungen, nie über Pfade vom Renderer -----
+  const refOf = (incidentId: unknown, shotId: unknown): { id: string; ref: ShotRef } => {
+    const id = checkIncidentId(incidentId);
+    const sid = checkShotId(shotId);
+    const ref = incidents.shotRefs(id).find((s) => s.id === sid);
+    if (!ref) throw new Error('Screenshot nicht gefunden.');
+    return { id, ref };
+  };
+  hv(IPC.setStoreShots, 'main', (_e, id, on) => {
+    const inc = incidents.setStoreShots(checkIncidentId(id), on === true);
+    sessions.refresh();
+    return inc;
+  });
+  hv(IPC.listShots, 'main', (_e, id) => incidents.shotRefs(checkIncidentId(id)));
+  hv(IPC.getShot, 'main', (_e, incidentId, shotId, variant) => {
+    const { id, ref } = refOf(incidentId, shotId);
+    const bytes =
+      variant === 'export'
+        ? shotStore.exportImage(id, ref, electronImageOps)
+        : shotStore.read(id, ref, variant === 'redacted' ? 'redacted' : 'original');
+    if (bytes.length > MAX_IMAGE_BYTES) throw new Error('Das Bild ist zu groß für die Anzeige.');
+    return `data:image/jpeg;base64,${bytes.toString('base64')}`;
+  });
+  hv(IPC.setShotKeep, 'main', (_e, incidentId, shotId, keep) => {
+    const { id, ref } = refOf(incidentId, shotId);
+    return incidents.replaceShot(id, { ...ref, keep: keep === true });
+  });
+  hv(IPC.discardShot, 'main', (_e, incidentId, shotId) => {
+    const { id, ref } = refOf(incidentId, shotId);
+    shotStore.remove(id, ref.id);
+    const left = incidents.removeShots(id, [ref.id]);
+    sessions.refresh();
+    return left;
+  });
+  hv(IPC.redactShot, 'main', (_e, incidentId, shotId, rects) => {
+    const { id, ref } = refOf(incidentId, shotId);
+    return incidents.replaceShot(id, shotStore.redact(id, ref, validateRects(rects), electronImageOps));
+  });
+  hv(IPC.deleteIncidentShots, 'main', (_e, incidentId) => {
+    const id = checkIncidentId(incidentId);
+    shotStore.deleteIncident(id);
+    const left = incidents.removeShots(id);
+    sessions.refresh();
+    return left;
+  });
+  hv(IPC.deleteAllShots, 'main', () => {
+    shotStore.deleteAll();
+    const n = incidents.clearAllShotRefs();
+    sessions.refresh();
+    return n;
+  });
+
+  // ----- Dokumentation -----
+  hv(IPC.prepareDoc, 'main', async (_e, incidentId, variant): Promise<DocPreview> => {
+    const id = checkIncidentId(incidentId);
+    if (variant !== 'short' && variant !== 'full' && variant !== 'customer') throw new Error('Ungültige Variante.');
+    const inc = incidents.get(id);
+    const result = inc.status === 'solved' ? 'solved' : 'unsolved';
+    // Nur Text an das kleine Modell, keine Bilder.
+    const llm = await sessions.summarize(inc, result, 'doc');
+    return {
+      title: inc.title,
+      summary: llm ?? fallbackSummary(inc, result),
+      summarySource: llm ? 'llm' : 'fallback',
+      steps: inc.history.map((h, i) => ({
+        index: i + 1,
+        text: h.step.text,
+        outcome: h.outcome,
+        shotId: inc.shots.find((s) => s.stepIndex === i + 1 && s.keep)?.id ?? null,
+      })),
+    };
+  });
+  hv(IPC.exportDoc, 'main', async (_e, incidentId, req) => {
+    const id = checkIncidentId(incidentId);
+    const r = (req ?? {}) as Partial<DocRequest>;
+    if (r.variant !== 'short' && r.variant !== 'full' && r.variant !== 'customer') throw new Error('Ungültige Variante.');
+    if (!Array.isArray(r.steps) || r.steps.length > 500 || !r.steps.every((n) => Number.isInteger(n) && n > 0)) throw new Error('Ungültige Schrittauswahl.');
+    const request: DocRequest = { variant: r.variant as DocVariant, steps: r.steps, summary: str(r.summary ?? '', 4000) };
+    const pick = await dialog.showOpenDialog(mainWindow!, { title: 'Zielordner für die Dokumentation', properties: ['openDirectory', 'createDirectory'] });
+    if (pick.canceled || !pick.filePaths[0]) return null;
+    const inc = incidents.get(id);
+    const model = buildDocModel(inc, request, (ref) => shotStore.exportImage(id, ref, electronImageOps), Date.now());
+    const folder = `${inc.title}-${model.date}`;
+    try {
+      return writeDocPackage(pick.filePaths[0], folder, model, false);
+    } catch (e) {
+      if ((e as { code?: string }).code !== 'exists') throw e;
+      const ask = await dialog.showMessageBox(mainWindow!, {
+        type: 'question',
+        buttons: ['Überschreiben', 'Abbrechen'],
+        defaultId: 1,
+        cancelId: 1,
+        message: 'Der Zielordner existiert bereits. Vorhandene Dateien mit gleichem Namen überschreiben?',
+      });
+      if (ask.response !== 0) return null;
+      return writeDocPackage(pick.filePaths[0], folder, model, true);
+    }
   });
   hr(IPC.resumeIncident, 'main', (_e, id, reason) => sessions.resume(str(id, 60), optStr(reason, 1000)));
   hv(IPC.finishIncident, 'main', (_e, id, r) => incidents.finishInactive(str(id, 60), r === 'unsolved' ? 'unsolved' : 'solved'));
@@ -348,6 +471,14 @@ async function boot(): Promise<void> {
     setChatBounds: (r) => settings.setChatBounds(r),
   });
 
+  shotStore = new ShotStore(dir, new ShotCrypto(dir, safeStorage));
+  const purge = () => {
+    const limit = Date.now() - settings.shotRetentionDays * 86_400_000;
+    for (const g of incidents.collectExpired((s) => Date.parse(s.at) < limit)) shotStore.remove(g.incidentId, g.shotId);
+  };
+  purge();
+  purgeTimer = setInterval(purge, 3_600_000);
+
   const auto = new AutoAdvance({
     now: Date.now,
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
@@ -373,6 +504,7 @@ async function boot(): Promise<void> {
     getReevaluate: () => settings.chatReevaluate,
     getAutoAdvance: () => settings.autoAdvance,
     getPriceOverrides: () => settings.priceOverrides(),
+    shots: shotStore,
     onChange: broadcast,
     onStart: () => chat.open(false),
     onEnd: () => chat.close(),
@@ -391,7 +523,7 @@ async function boot(): Promise<void> {
   if (process.env['ITT_SELFTEST'] === '1') {
     const { runSelfTest } = await import('./selftest');
     mainWindow.webContents.once('did-finish-load', () => {
-      void runSelfTest({ win: mainWindow!, overlay, chat, settings, sessions, incidents, capturer });
+      void runSelfTest({ win: mainWindow!, overlay, chat, settings, sessions, incidents, capturer, shotStore });
     });
   }
 }
@@ -406,9 +538,20 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
   app.on('window-all-closed', () => app.quit());
+  app.on('quit', () => {
+    if (!selftestDir) return;
+    // Selbsttest: temporären Datenordner entfernen (erst jetzt sind die Dateien freigegeben) und mit dem Testergebnis beenden.
+    try {
+      rmSync(selftestDir, { recursive: true, force: true });
+    } catch {
+      // best effort
+    }
+    process.exit(Number(process.env['ITT_SELFTEST_CODE'] ?? 0));
+  });
   app.on('before-quit', () => {
     if (heartbeat) clearInterval(heartbeat);
     if (pillTimer) clearInterval(pillTimer);
+    if (purgeTimer) clearInterval(purgeTimer);
     globalShortcut.unregisterAll();
     // Laufende Sitzung sauber als "pausiert" ablegen (Zeitmessung stoppt, Status bleibt erhalten).
     void sessions?.pause();
