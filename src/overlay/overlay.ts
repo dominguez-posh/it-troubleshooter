@@ -20,8 +20,18 @@ function svg<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string,
   return el;
 }
 
+function pillEl(text: string): HTMLDivElement {
+  const d = document.createElement('div');
+  d.textContent = text;
+  d.style.cssText =
+    'position:fixed;right:16px;bottom:16px;max-width:360px;padding:6px 12px;border-radius:999px;background:rgba(20,24,33,0.82);color:#fff;font:500 13px "Segoe UI",system-ui,sans-serif;border:1px solid rgba(255,255,255,.25);';
+  return d;
+}
+
 function render(p: OverlayPayload): void {
   document.body.replaceChildren();
+  if (p.pill) document.body.append(pillEl(p.pill));
+  if (!p.tip && !p.text) return;
   const { viewport } = p;
   const root = svg('svg', { width: viewport.width, height: viewport.height, viewBox: `0 0 ${viewport.width} ${viewport.height}` });
   root.style.cssText = 'position:fixed;left:0;top:0;';
