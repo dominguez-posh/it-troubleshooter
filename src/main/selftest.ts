@@ -37,7 +37,9 @@ export async function runSelfTest(c: Ctx): Promise<void> {
   };
   const check = (ok: boolean, name: string) => checks.push(ok ? name : `FEHLER: ${name}`);
   c.win.webContents.on('console-message', (_e, level, message) => {
-    if (level >= 3) (out['rendererErrors'] ??= [] as string[]) && (out['rendererErrors'] as string[]).push(message.slice(0, 200));
+    if (level < 3) return;
+    const arr = (out['rendererErrors'] ??= []) as string[];
+    arr.push(message.slice(0, 200));
   });
   const clickCard = (label: string) => js(`[...document.querySelectorAll('#card button')].find(b => b.textContent.includes(${JSON.stringify(label)}))?.click()`);
   try {
