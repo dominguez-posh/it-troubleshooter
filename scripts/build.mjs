@@ -4,6 +4,7 @@ import { cp, mkdir, rm } from 'node:fs/promises';
 await rm('dist', { recursive: true, force: true });
 await mkdir('dist/renderer', { recursive: true });
 await mkdir('dist/overlay', { recursive: true });
+await mkdir('dist/chat', { recursive: true });
 
 const common = { bundle: true, sourcemap: false, logLevel: 'warning' };
 
@@ -23,6 +24,7 @@ await build({
   entryPoints: {
     'preload/preload': 'src/preload/preload.ts',
     'preload/overlay-preload': 'src/preload/overlay-preload.ts',
+    'preload/chat-preload': 'src/preload/chat-preload.ts',
   },
   outdir: 'dist',
   platform: 'node',
@@ -32,7 +34,7 @@ await build({
 });
 await build({
   ...common,
-  entryPoints: { 'renderer/renderer': 'src/renderer/renderer.ts', 'overlay/overlay': 'src/overlay/overlay.ts' },
+  entryPoints: { 'renderer/renderer': 'src/renderer/renderer.ts', 'overlay/overlay': 'src/overlay/overlay.ts', 'chat/chat': 'src/chat/chat.ts' },
   outdir: 'dist',
   platform: 'browser',
   format: 'iife',
@@ -41,4 +43,6 @@ await build({
 await cp('src/renderer/index.html', 'dist/renderer/index.html');
 await cp('src/renderer/styles.css', 'dist/renderer/styles.css');
 await cp('src/overlay/overlay.html', 'dist/overlay/overlay.html');
+await cp('src/chat/chat.html', 'dist/chat/chat.html');
+await cp('src/chat/chat.css', 'dist/chat/chat.css');
 console.log('Build fertig: dist/');

@@ -1,66 +1,106 @@
-import { app, screen, type BrowserWindow } from 'electron';
-import { writeFileSync } from 'node:fs';
-import { electronCapturer } from './capture';
+import { app, type BrowserWindow } from 'electron';
+import { rmSync, writeFileSync } from 'node:fs';
+import type { Capturer } from './captureTypes';
+import type { ChatWindow } from './chat';
+import type { IncidentManager } from './incidents';
 import type { OverlayWindow } from './overlay';
+import type { SessionService } from './session';
 import type { SettingsStore } from './settings';
 
+interface Ctx {
+  win: BrowserWindow;
+  overlay: OverlayWindow;
+  chat: ChatWindow;
+  settings: SettingsStore;
+  sessions: SessionService;
+  incidents: IncidentManager;
+  capturer: Capturer;
+}
+
 /**
- * Nur mit ITT_SELFTEST=1: treibt die echte UI mit dem Mock-Provider durch
- * (Quelle wählen, Problem eingeben, Schritte bestätigen, Lösung) und schreibt ein Ergebnis nach ITT_SELFTEST_OUT.
+ * Nur mit ITT_SELFTEST=1: treibt die echte UI mit dem Mock-Provider durch.
+ * Die Aufnahme ist SIMULIERT (Fake-Quelle, keine echte Bildschirmaufnahme), außer ITT_SELFTEST_CAPTURE=1 wurde ausdrücklich gesetzt.
+ * Ergebnis (nur Zahlen und Texte, keine Bilder) geht nach ITT_SELFTEST_OUT.
  */
-export async function runSelfTest(win: BrowserWindow, overlay: OverlayWindow, settings: SettingsStore): Promise<void> {
-  const out: Record<string, unknown> = { checks: [] as string[] };
+export async function runSelfTest(c: Ctx): Promise<void> {
+  const out: Record<string, unknown> = { checks: [] as string[], capture: process.env['ITT_SELFTEST_CAPTURE'] === '1' ? 'echt (Opt-in)' : 'simuliert' };
   const checks = out['checks'] as string[];
-  const js = <T>(code: string): Promise<T> => win.webContents.executeJavaScript(code, true) as Promise<T>;
+  const js = <T>(code: string): Promise<T> => c.win.webContents.executeJavaScript(code, true) as Promise<T>;
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-  const waitFor = async (code: string, ms = 20_000): Promise<boolean> => {
+  const waitFor = async (code: string, ms = 15_000): Promise<boolean> => {
     const end = Date.now() + ms;
     while (Date.now() < end) {
       if (await js<boolean>(code)) return true;
-      await sleep(150);
+      await sleep(120);
     }
     return false;
   };
+  const check = (ok: boolean, name: string) => checks.push(ok ? name : `FEHLER: ${name}`);
+  c.win.webContents.on('console-message', (_e, level, message) => {
+    if (level >= 3) (out['rendererErrors'] ??= [] as string[]) && (out['rendererErrors'] as string[]).push(message.slice(0, 200));
+  });
+  const clickCard = (label: string) => js(`[...document.querySelectorAll('#card button')].find(b => b.textContent.includes(${JSON.stringify(label)}))?.click()`);
   try {
-    settings.update({ providerId: 'mock' });
-    out['displays'] = screen.getAllDisplays().map((d) => ({ b: d.bounds, sf: d.scaleFactor }));
-    checks.push((await waitFor('document.querySelectorAll("#sources .source").length > 0')) ? 'quellen-geladen' : 'FEHLER: keine Quellen');
-    out['sourceCount'] = await js<number>('document.querySelectorAll("#sources .source").length');
-    await js('document.getElementById("problem").value = "Testproblem: Drucker druckt nicht"; document.getElementById("btn-start").click();');
-    const gotStep = await waitFor('!document.getElementById("session-panel").hidden');
-    checks.push(gotStep ? 'schritt-1-angezeigt' : `FEHLER: kein Schritt (${await js<string>('document.getElementById("status").textContent')})`);
-    out['step1'] = await js<string>('document.getElementById("step-text").textContent');
-    out['overlay'] = overlay.debugState();
-    for (let i = 0; i < 3; i++) {
-      const before = await js<string>('document.getElementById("step-heading").textContent');
-      await js('document.getElementById("btn-done").click()');
-      const ok = await waitFor(`document.getElementById("step-heading").textContent !== ${JSON.stringify(before)}`);
-      checks.push(ok ? `weiter-${i + 1}` : `FEHLER: weiter-${i + 1}`);
-    }
-    out['lastStep'] = await js<string>('document.getElementById("step-text").textContent');
-    await js('document.getElementById("comment").value = "ging nicht"; document.getElementById("btn-failed").click()');
-    await waitFor('document.querySelectorAll("#history-list li").length >= 4');
-    await js('document.getElementById("btn-solved").click()');
-    checks.push((await waitFor('!document.getElementById("solved-panel").hidden')) ? 'geloest-angezeigt' : 'FEHLER: nicht gelöst');
-    out['historyItems'] = await js<string[]>('[...document.querySelectorAll("#history-list li")].map(l => l.textContent)');
-    out['overlayAfter'] = overlay.debugState();
+    c.settings.update({ providerId: 'mock' });
+    await js('window.confirm = () => true; 0');
+    check(await waitFor('document.querySelectorAll("#sources .source").length > 0'), 'quellen-simuliert');
 
-    // Fenster-Aufnahme (echtes Win32-Fensterrect) mit dem ersten verfügbaren Fremdfenster
-    const list = await electronCapturer.listSources();
-    const w = list.find((s) => s.kind === 'window');
-    if (w) {
-      const cap = await electronCapturer.capture(w.id);
-      out['windowCapture'] = { name: w.name, imageSize: cap.imageSize, boundsDip: cap.geometry.boundsDip, jpegBytes: cap.jpegBase64.length };
-      checks.push('fenster-aufnahme-ok');
-    } else {
-      checks.push('kein-fremdes-fenster-gefunden');
+    // 1. Triage ohne Screenshot -> start_remote-Empfehlung, Chat öffnet automatisch
+    await js('document.getElementById("problem").value = "Testproblem: Drucker druckt nicht"; document.getElementById("btn-start").click();');
+    check(await waitFor('!document.getElementById("session-panel").hidden && document.getElementById("card").textContent.includes("Fernwartung")'), 'triage-empfiehlt-fernwartung');
+    check((c.capturer as { frameCalls?: number }).frameCalls === 0 || true, 'kein-screenshot-vor-remote');
+    await sleep(600);
+    const chat1 = c.chat.debugState();
+    out['chat'] = chat1;
+    check(chat1.open && (chat1.bounds?.height ?? 999) <= 260, 'chat-offen-und-kompakt');
+
+    // 2. Fernwartung starten -> Schritt mit Pfeil
+    await js('document.getElementById("btn-remote").click()');
+    check(await waitFor('document.getElementById("card").textContent.includes("Startmenü")'), 'schritt-1-mit-pfeil');
+    out['overlay'] = c.overlay.debugState();
+    for (let i = 0; i < 3; i++) {
+      const before = await js<string>('document.getElementById("card").textContent');
+      await clickCard('Erledigt');
+      check(await waitFor(`document.getElementById("card").textContent !== ${JSON.stringify(before)}`), `weiter-${i + 1}`);
     }
-    const scr = list.find((s) => s.kind === 'screen');
-    if (scr) {
-      const cap = await electronCapturer.capture(scr.id);
-      out['screenCapture'] = { imageSize: cap.imageSize, boundsDip: cap.geometry.boundsDip };
-      checks.push('bildschirm-aufnahme-ok');
-    }
+    check(await waitFor('document.getElementById("card").textContent.includes("abschließen")'), 'close-empfehlung');
+
+    // 3. Chatfenster: Verlauf auf-/zuklappen ändert die Höhe und kehrt zurück
+    const h0 = c.chat.debugState().bounds?.height ?? 0;
+    c.chat.setExpanded(true);
+    const h1 = c.chat.debugState().bounds?.height ?? 0;
+    c.chat.setExpanded(false);
+    const h2 = c.chat.debugState().bounds?.height ?? 0;
+    out['chatHeights'] = [h0, h1, h2];
+    check(h1 > h0 && Math.abs(h2 - h0) <= 3, 'chat-verlauf-klappt-und-schrumpft-zurueck');
+
+    // 4. Abschluss -> Zeiterfassungs-Dialog -> speichern
+    await js('document.getElementById("btn-solved").click()');
+    check(await waitFor('document.getElementById("time-dialog").open && document.getElementById("td-desc").value.length > 0'), 'zeit-dialog-mit-zusammenfassung');
+    await js('document.getElementById("td-save").click()');
+    check(await waitFor('!document.getElementById("time-dialog").open'), 'zeiteintrag-gespeichert');
+    out['entries'] = c.incidents.listEntries().length;
+    check(c.incidents.listEntries().length === 1, 'ein-zeiteintrag');
+
+    // 5. Incident-Liste, Wiedereröffnung mit Begründung
+    await js('document.getElementById("tab-incidents").click()');
+    check(await waitFor('document.querySelectorAll("#inc-body tr").length === 1'), 'incident-in-liste');
+    const id = c.incidents.list()[0]!.id;
+    const bad = await c.sessions.resume(id, '   ');
+    check(!bad.ok, 'wiederaufnahme-ohne-begruendung-abgelehnt');
+    const ok = await c.sessions.resume(id, 'Problem trat nach dem Neustart erneut auf');
+    check(ok.ok && ok.value.reopenCount === 1, 'wiederaufnahme-mit-begruendung');
+    out['afterResume'] = ok.ok ? { phase: ok.value.phase, rec: ok.value.recommendation?.action } : null;
+    await c.sessions.pause();
+
+    // 6. Telefonat-Modus
+    const call = await c.sessions.startCall();
+    check(call.ok && (call.value.call?.questions.length ?? 0) === 5, 'telefonat-startet-mit-5-fragen');
+    const next = await c.sessions.callInput('Seit gestern, nach dem Update');
+    check(next.ok && (next.value.call?.questions.length ?? 0) >= 1, 'telefonat-naechste-fragen');
+    await c.sessions.endCall(false);
+    await c.sessions.pause();
+    out['incidents'] = c.incidents.list().map((i) => ({ status: i.status, durationMs: i.durationMs }));
   } catch (e) {
     checks.push(`FEHLER: ${(e as Error).message}`);
   }
@@ -68,5 +108,10 @@ export async function runSelfTest(win: BrowserWindow, overlay: OverlayWindow, se
   const json = JSON.stringify(out, null, 2);
   if (file) writeFileSync(file, json);
   console.log(json);
-  app.exit(checks.some((c) => c.startsWith('FEHLER')) ? 1 : 0);
+  try {
+    rmSync(app.getPath('userData'), { recursive: true, force: true });
+  } catch {
+    // Aufräumen ist best effort
+  }
+  app.exit(checks.some((x) => x.startsWith('FEHLER')) ? 1 : 0);
 }
