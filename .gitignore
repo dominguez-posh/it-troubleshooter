@@ -1,0 +1,9 @@
+node_modules
+dist
+out
+*.log
+.env
+.env.*
+
+# Lokales Team-Setup (nicht öffentlich)
+.claude/
