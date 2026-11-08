@@ -194,6 +194,65 @@ export interface ActivityLogEntry {
   durationMs: number;
 }
 
+/** Verweis auf einen lokal gespeicherten Screenshot (die Bilddaten liegen nie in der JSON). */
+export interface ShotRef {
+  /** Zufällige Kennung (nur [a-z0-9-]); der Renderer referenziert Bilder ausschließlich darüber. */
+  id: string;
+  at: string;
+  /** Nummer des Schritts (1-basiert). */
+  stepIndex: number;
+  text: string;
+  target: Point | null;
+  imageSize: ImageSize;
+  /** "Bildschirm" oder Fenstertitel. */
+  source: string;
+  outcome?: StepOutcome;
+  /** Für die Doku behalten. */
+  keep: boolean;
+  sha256: string;
+  bytes: number;
+  /** Geschwärzte Kopie vorhanden (Doku-Export nutzt dann nur diese). */
+  redacted: boolean;
+  encrypted: boolean;
+}
+
+export interface ShotsInfo {
+  /** Wird für den aktiven Incident gespeichert? */
+  enabled: boolean;
+  count: number;
+  error: string | null;
+  encrypted: boolean;
+}
+
+export type DocVariant = 'short' | 'full' | 'customer';
+
+export interface DocRequest {
+  variant: DocVariant;
+  /** Indizes (1-basiert) der Schritte, die in die Doku kommen. */
+  steps: number[];
+  summary: string;
+}
+
+export interface DocPreview {
+  title: string;
+  summary: string;
+  summarySource: 'llm' | 'fallback';
+  steps: Array<{ index: number; text: string; outcome: StepOutcome | null; shotId: string | null }>;
+}
+
+export interface DocExportResult {
+  dir: string;
+  files: number;
+}
+
+/** Normierte Rechtecke (0..1) im Bild. */
+export interface NormRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 /** Modell-Stufen: so klein wie möglich, so groß wie nötig. */
 export type ModelTier = 'small' | 'medium' | 'large';
 export const TIERS: ModelTier[] = ['small', 'medium', 'large'];
@@ -338,6 +397,8 @@ export interface SettingsView {
   activityPill: boolean;
   /** Auto-Weiter: nächster Schritt nach erkanntem Klick/Bildschirmänderung (Standard aus). */
   autoAdvance: boolean;
+  /** Aufbewahrungsfrist für Screenshots in Tagen. */
+  shotRetentionDays: number;
   costWarnEur: number | null;
   costLimitEur: number | null;
   costIncidentLimitEur: number | null;
@@ -362,6 +423,7 @@ export interface SettingsPatch {
   callShortcut?: boolean;
   activityPill?: boolean;
   autoAdvance?: boolean;
+  shotRetentionDays?: number;
   /** null = kein Wert. */
   costWarnEur?: number | null;
   costLimitEur?: number | null;
@@ -402,6 +464,7 @@ export interface SessionView {
   activity: ActivityState;
   activityLog: ActivityLogEntry[];
   cost: CostView;
+  shots: ShotsInfo;
   /** Telefonat-Modus aktiv (sonst null). */
   call: CallView | null;
 }
@@ -454,6 +517,17 @@ export interface RendererApi {
   resumeIncident(id: string, reason?: string): Promise<Result<SessionView>>;
   finishIncident(id: string, result: 'solved' | 'unsolved'): Promise<Result<Incident>>;
 
+  setStoreShots(incidentId: string, on: boolean): Promise<Result<Incident>>;
+  listShots(incidentId: string): Promise<Result<ShotRef[]>>;
+  /** Liefert das Bild als data-URL (Variante "export" = geschwärzt, mit eingebranntem Pfeil). */
+  getShot(incidentId: string, shotId: string, variant: 'original' | 'redacted' | 'export'): Promise<Result<string>>;
+  setShotKeep(incidentId: string, shotId: string, keep: boolean): Promise<Result<ShotRef[]>>;
+  discardShot(incidentId: string, shotId: string): Promise<Result<ShotRef[]>>;
+  redactShot(incidentId: string, shotId: string, rects: NormRect[]): Promise<Result<ShotRef[]>>;
+  deleteIncidentShots(incidentId: string): Promise<Result<ShotRef[]>>;
+  deleteAllShots(): Promise<Result<number>>;
+  prepareDoc(incidentId: string, variant: DocVariant): Promise<Result<DocPreview>>;
+  exportDoc(incidentId: string, req: DocRequest): Promise<Result<DocExportResult | null>>;
   prepareTimeEntry(incidentId: string, result: 'solved' | 'unsolved'): Promise<Result<TimeEntryDraft>>;
   saveTimeEntry(draft: TimeEntryDraft): Promise<Result<TimeEntry>>;
   listTimeEntries(): Promise<Result<TimeEntry[]>>;
@@ -548,6 +622,16 @@ export const IPC = {
   setTimeEntriesStatus: 'time:status',
   deleteTimeEntry: 'time:delete',
   exportTimeEntriesCsv: 'time:export',
+  setStoreShots: 'shots:store',
+  listShots: 'shots:list',
+  getShot: 'shots:get',
+  setShotKeep: 'shots:keep',
+  discardShot: 'shots:discard',
+  redactShot: 'shots:redact',
+  deleteIncidentShots: 'shots:delete-incident',
+  deleteAllShots: 'shots:delete-all',
+  prepareDoc: 'doc:prepare',
+  exportDoc: 'doc:export',
 } as const;
 
 export interface OverlayPayload {

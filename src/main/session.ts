@@ -32,6 +32,7 @@ import { chooseTier, routeCall, type RouteContext } from './llm/router';
 import type { CallSuggestion } from './llm/schema';
 import type { CallOptions, LlmProvider, LlmResult, RecommendRequest } from './llm/types';
 import type { OverlayController } from './overlay';
+import type { ShotStore } from './shots';
 import { deriveTitle } from '../shared/incident';
 
 export interface SessionDeps {
@@ -51,6 +52,8 @@ export interface SessionDeps {
   getAutoAdvance?(): boolean;
   getPriceOverrides?(): Record<string, Price>;
   autoAdvance?: Pick<AutoAdvance, 'watch' | 'stop'>;
+  /** Lokale Screenshot-Ablage (optional, in Tests oft leer). */
+  shots?: Pick<ShotStore, 'save' | 'encryptionAvailable'>;
   now?(): number;
   timeoutMs?: number;
   onChange?(view: SessionView): void;
@@ -128,6 +131,9 @@ export class SessionService {
   private sticky: ModelTier | null = null;
   private lastRequest: LlmLogEntry | null = null;
   private lastAction: (() => Promise<Result<SessionView>>) | null = null;
+  private commandsUsed: SessionSnapshot['commandsUsed'] = [];
+  private currentShotId: string | null = null;
+  private shotsError: string | null = null;
   readonly activity: ActivityTracker;
   private readonly now: () => number;
 
@@ -173,8 +179,18 @@ export class SessionService {
       activity: this.activity.current(),
       activityLog: this.activity.entries().slice(-15),
       cost: this.deps.cost.view(usage.costUsd),
+      shots: {
+        ...(id ? this.deps.persistence.shotsInfo(id) : { enabled: true, count: 0 }),
+        error: this.shotsError,
+        encrypted: this.deps.shots?.encryptionAvailable ?? false,
+      },
       call: this.callView(),
     };
+  }
+
+  /** Sicht neu an die Fenster senden (z. B. nach Änderungen außerhalb der Sitzung). */
+  refresh(): void {
+    this.notify();
   }
 
   private notify(): void {
@@ -194,6 +210,7 @@ export class SessionService {
       holding: this.holding,
       timerPaused: this.timerPaused,
       serverAccess: this.serverAccess,
+      commandsUsed: this.commandsUsed ?? [],
     };
   }
 
@@ -302,7 +319,7 @@ export class SessionService {
   }
 
   /** Hauptempfehlung holen; mit Screenshot nur im Schritt-Modus (nach Fernwartungsstart). */
-  private async fetchRecommendation(opts: { withImage: boolean; prefer?: 'question'; resumed?: boolean }): Promise<{ rec: Recommendation; geometry?: CaptureGeometry; sourceName?: string }> {
+  private async fetchRecommendation(opts: { withImage: boolean; prefer?: 'question'; resumed?: boolean }): Promise<{ rec: Recommendation; geometry?: CaptureGeometry; sourceName?: string; jpeg?: string; size?: { width: number; height: number } }> {
     const req = this.baseRequest();
     if (opts.prefer) req.prefer = opts.prefer;
     if (opts.resumed) req.resumed = true;
@@ -328,7 +345,9 @@ export class SessionService {
       (p, o) => p.recommend(req, o),
       (r) => r.confidence === 'low',
     );
-    const out: { rec: Recommendation; geometry?: CaptureGeometry; sourceName?: string } = { rec };
+    const out: { rec: Recommendation; geometry?: CaptureGeometry; sourceName?: string; jpeg?: string; size?: { width: number; height: number } } = { rec };
+    if (req.screenshotJpegBase64) out.jpeg = req.screenshotJpegBase64;
+    if (req.imageSize) out.size = req.imageSize;
     if (geometry) out.geometry = geometry;
     if (sourceName !== undefined) out.sourceName = sourceName;
     return out;
@@ -340,7 +359,7 @@ export class SessionService {
     this.overlayShown = true;
   }
 
-  private async apply(r: { rec: Recommendation; geometry?: CaptureGeometry; sourceName?: string }): Promise<void> {
+  private async apply(r: { rec: Recommendation; geometry?: CaptureGeometry; sourceName?: string; jpeg?: string; size?: { width: number; height: number } }): Promise<void> {
     this.deps.autoAdvance?.stop();
     this.recommendation = r.rec;
     this.recPostponed = false;
@@ -349,6 +368,7 @@ export class SessionService {
       this.current = { step: stepFromRec(r.rec), geometry: r.geometry };
       this.targetWindow = r.sourceName ?? null;
       this.persist();
+      this.storeShot(r);
       await this.presentStep(this.current);
       this.activity.set('please_click', { detail: sanitize(this.current.step.text, 60) });
       this.startAutoAdvance();
@@ -359,6 +379,29 @@ export class SessionService {
       this.overlayShown = false;
       this.persist();
       this.activity.idle();
+    }
+  }
+
+  /** Speichert den Screenshot dieses Schritts lokal (verschlüsselt, wenn möglich), falls für den Incident aktiviert. Fehler stoppen die Sitzung nicht. */
+  private storeShot(r: { jpeg?: string; size?: { width: number; height: number }; sourceName?: string }): void {
+    this.currentShotId = null;
+    const id = this.incidentId;
+    const shots = this.deps.shots;
+    if (!id || !shots || !r.jpeg || !r.size || !this.current) return;
+    if (!this.deps.persistence.shotsInfo(id).enabled) return;
+    try {
+      const ref = shots.save(id, Buffer.from(r.jpeg, 'base64'), {
+        stepIndex: this.history.length + 1,
+        text: this.current.step.text,
+        target: this.current.step.target,
+        imageSize: r.size,
+        source: r.sourceName ?? 'Bildschirm',
+      });
+      this.deps.persistence.addShot(id, ref);
+      this.currentShotId = ref.id;
+      this.shotsError = null;
+    } catch (e) {
+      this.shotsError = e instanceof Error ? e.message : 'Der Screenshot konnte nicht gespeichert werden.';
     }
   }
 
@@ -394,6 +437,9 @@ export class SessionService {
     this.overlayShown = false;
     this.sticky = null;
     this.lastRequest = null;
+    this.commandsUsed = [];
+    this.currentShotId = null;
+    this.shotsError = null;
   }
 
   private addNote(text: string): void {
@@ -451,6 +497,7 @@ export class SessionService {
       this.notes = inc.notes;
       this.events = inc.events;
       this.serverAccess = inc.serverAccess;
+      this.commandsUsed = inc.commandsUsed;
       this.deps.onStart?.();
       this.notify();
       try {
@@ -548,6 +595,11 @@ export class SessionService {
         return { ok: true, value: this.view() };
       }
       // done
+      if (rec.commands?.length) {
+        const known = new Set((this.commandsUsed ?? []).map((c) => c.command));
+        const add = rec.commands.filter((c) => !known.has(c.command)).map((c) => ({ command: c.command, explanation: c.explanation, mode: c.mode }));
+        this.commandsUsed = [...(this.commandsUsed ?? []), ...add].slice(-30);
+      }
       switch (rec.action) {
         case 'ask_customer':
           this.persist();
@@ -603,6 +655,7 @@ export class SessionService {
       const c = comment?.trim().slice(0, 1000);
       if (c) entry.comment = c;
       const prevHistory = this.history;
+      const shotId = this.currentShotId;
       this.history = [...this.history, entry];
       try {
         await this.apply(await this.fetchRecommendation({ withImage: true }));
@@ -612,6 +665,7 @@ export class SessionService {
         if (this.current) await this.presentStep(this.current).catch(() => undefined);
         throw e;
       }
+      if (shotId && this.incidentId) this.deps.persistence.patchShot(this.incidentId, shotId, { outcome });
       return { ok: true, value: this.view() };
     });
   }
@@ -732,9 +786,9 @@ export class SessionService {
   }
 
   /** Kurze Zusammenfassung (kleine Stufe, nur Text). Gibt null zurück, wenn das Modell nicht erreichbar oder das Limit erreicht ist. */
-  async summarize(inc: { problem: string; history: HistoryEntry[]; notes: SessionNote[] }, result: 'solved' | 'unsolved'): Promise<string | null> {
+  async summarize(inc: { problem: string; history: HistoryEntry[]; notes: SessionNote[] }, result: 'solved' | 'unsolved', purpose: 'time' | 'doc' = 'time'): Promise<string | null> {
     try {
-      const req = { problem: inc.problem, history: inc.history, notes: inc.notes, result };
+      const req = { problem: inc.problem, history: inc.history, notes: inc.notes, result, purpose };
       const est = SYSTEM_TOKENS + estimateTokens(buildSummaryText(req));
       const text = await this.llm('summary', est, (p, o) => p.summarize(req, o));
       this.activity.idle();

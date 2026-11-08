@@ -15,7 +15,7 @@ const status = z.enum(['draft', 'call', 'triage', 'waiting', 'remote', 'paused',
 const iso = z.string().default(() => new Date().toISOString());
 
 const incidentSchema = z.object({
-  id: z.string().min(1),
+  id: z.string().regex(/^[A-Za-z0-9-]{1,64}$/),
   title: z.string().default('Ohne Titel'),
   customer: z.string().default(''),
   problem: z.string().default(''),
@@ -56,6 +56,29 @@ const incidentSchema = z.object({
     .object({ state: z.enum(['yes', 'no', 'unclear']), kind: z.enum(['rdp', 'ssh', 'web', 'other']).optional(), note: z.string().max(100).optional() })
     .nullable()
     .default(null),
+  storeShots: z.boolean().default(true),
+  shots: z
+    .array(
+      z.object({
+        id: z.string().regex(/^[a-z0-9-]{8,40}$/),
+        at: z.string(),
+        stepIndex: z.number().int().min(1),
+        text: z.string(),
+        target: point.nullable().default(null),
+        imageSize: z.object({ width: z.number(), height: z.number() }),
+        source: z.string().default(''),
+        outcome: z.enum(['done', 'failed']).optional(),
+        keep: z.boolean().default(true),
+        sha256: z.string(),
+        bytes: z.number(),
+        redacted: z.boolean().default(false),
+        encrypted: z.boolean().default(false),
+      }),
+    )
+    .default([]),
+  commandsUsed: z
+    .array(z.object({ command: z.string(), explanation: z.string(), mode: z.enum(['readonly', 'changing']) }))
+    .default([]),
   usage: z
     .object({ requests: z.number().default(0), inputTokens: z.number().default(0), outputTokens: z.number().default(0), costUsd: z.number().default(0) })
     .default({ requests: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 }),

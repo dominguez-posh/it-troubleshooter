@@ -53,6 +53,8 @@ export interface SummaryRequest {
   history: HistoryEntry[];
   notes: SessionNote[];
   result: 'solved' | 'unsolved';
+  /** time = Zeiterfassung, doc = Ursache und Lösung für die Dokumentation. */
+  purpose?: 'time' | 'doc';
 }
 
 /** Schnittstelle, die jeder LLM-Adapter erfüllen muss. */

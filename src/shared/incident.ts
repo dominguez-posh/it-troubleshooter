@@ -1,4 +1,4 @@
-import type { HistoryEntry, LlmLogEntry, RecEvent, Recommendation, ServerAccess, SessionNote, Step, UsageTotals } from './types';
+import type { HistoryEntry, LlmLogEntry, RecEvent, Recommendation, ServerAccess, SessionNote, ShotRef, Step, UsageTotals } from './types';
 
 /** Aktuelle Version des Speicherformats (siehe IncidentStore und migrate). */
 export const SCHEMA_VERSION = 1;
@@ -64,6 +64,12 @@ export interface Incident {
   reopens: ReopenEntry[];
   /** Antwort auf "Zugriff auf den Server?" – keine Zugangsdaten. */
   serverAccess: ServerAccess | null;
+  /** Screenshots dieses Incidents speichern (Standard an). */
+  storeShots: boolean;
+  /** Verweise auf lokal gespeicherte Screenshots (Bilder liegen nie in der JSON). */
+  shots: ShotRef[];
+  /** Vom Supporter als gemacht bestätigte Befehle (für die Doku). */
+  commandsUsed: Array<{ command: string; explanation: string; mode: 'readonly' | 'changing' }>;
   /** Nur Zahlen und Modellnamen, keine Inhalte. */
   usage: UsageTotals;
   llmLog: LlmLogEntry[];

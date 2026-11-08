@@ -18,7 +18,7 @@ import {
   type TimeEntryStatus,
 } from '../shared/incident';
 import { buildTimeEntryDraft, redactSensitive } from '../shared/timeEntry';
-import type { HistoryEntry, IncidentPatch, LlmLogEntry, RecEvent, Recommendation, ServerAccess, SessionNote, Step, UsageTotals } from '../shared/types';
+import type { HistoryEntry, IncidentPatch, LlmLogEntry, RecEvent, Recommendation, ServerAccess, SessionNote, ShotRef, Step, UsageTotals } from '../shared/types';
 import type { IncidentStore } from './incidentStore';
 import { CsvExportSink, LocalListSink } from './sinks';
 
@@ -35,6 +35,7 @@ export interface SessionSnapshot {
   holding: boolean;
   timerPaused: boolean;
   serverAccess: ServerAccess | null;
+  commandsUsed?: Incident['commandsUsed'];
 }
 
 export interface SessionPersistence {
@@ -47,6 +48,9 @@ export interface SessionPersistence {
   usageOf(id: string): UsageTotals;
   reopenCount(id: string): number;
   beginResume(id: string, reason?: string): Incident;
+  shotsInfo(id: string): { enabled: boolean; count: number };
+  addShot(id: string, ref: ShotRef): void;
+  patchShot(id: string, shotId: string, patch: Partial<Pick<ShotRef, 'outcome'>>): void;
 }
 
 const MAX_NOTES = 50;
@@ -122,6 +126,9 @@ export class IncidentManager implements SessionPersistence {
       lastActiveAt: t,
       reopens: [],
       serverAccess: null,
+      storeShots: true,
+      shots: [],
+      commandsUsed: [],
       usage: emptyUsage(),
       llmLog: [],
     };
@@ -139,6 +146,7 @@ export class IncidentManager implements SessionPersistence {
     inc.notes = snap.notes.slice(-MAX_NOTES);
     inc.currentStep = snap.currentStep;
     inc.serverAccess = snap.serverAccess;
+    if (snap.commandsUsed) inc.commandsUsed = snap.commandsUsed.slice(-30);
   }
 
   sync(id: string, snap: SessionSnapshot): void {
@@ -213,6 +221,77 @@ export class IncidentManager implements SessionPersistence {
     this.activeId = id;
     this.save(inc);
     return structuredClone(inc);
+  }
+
+  // ---------- Screenshots (nur Verweise; Bilder liegen in der ShotStore-Ablage) ----------
+  shotsInfo(id: string): { enabled: boolean; count: number } {
+    const inc = this.store.get(id);
+    return { enabled: inc?.storeShots ?? true, count: inc?.shots.length ?? 0 };
+  }
+
+  addShot(id: string, ref: ShotRef): void {
+    const inc = this.must(id);
+    inc.shots = [...inc.shots, ref];
+    this.store.put(inc);
+  }
+
+  patchShot(id: string, shotId: string, patch: Partial<Pick<ShotRef, 'outcome'>>): void {
+    const inc = this.store.get(id);
+    const s = inc?.shots.find((x) => x.id === shotId);
+    if (!inc || !s) return;
+    Object.assign(s, patch);
+    this.store.put(inc);
+  }
+
+  shotRefs(id: string): ShotRef[] {
+    return structuredClone(this.must(id).shots);
+  }
+
+  setStoreShots(id: string, on: boolean): Incident {
+    const inc = this.must(id);
+    inc.storeShots = on;
+    return structuredClone(this.save(inc));
+  }
+
+  /** Ersetzt einen Verweis (z. B. nach dem Schwärzen) oder ändert "behalten". */
+  replaceShot(id: string, ref: ShotRef): ShotRef[] {
+    const inc = this.must(id);
+    inc.shots = inc.shots.map((s) => (s.id === ref.id ? ref : s));
+    this.store.put(inc);
+    return structuredClone(inc.shots);
+  }
+
+  removeShots(id: string, shotIds?: string[]): ShotRef[] {
+    const inc = this.must(id);
+    const set = shotIds ? new Set(shotIds) : null;
+    inc.shots = set ? inc.shots.filter((s) => !set.has(s.id)) : [];
+    this.store.put(inc);
+    return structuredClone(inc.shots);
+  }
+
+  /** Entfernt Verweise abgelaufener Screenshots in allen Incidents und gibt (Incident, Screenshot) zum Löschen der Dateien zurück. */
+  collectExpired(isExpired: (s: ShotRef) => boolean): Array<{ incidentId: string; shotId: string }> {
+    const out: Array<{ incidentId: string; shotId: string }> = [];
+    for (const inc of this.store.incidents()) {
+      const gone = inc.shots.filter(isExpired);
+      if (!gone.length) continue;
+      inc.shots = inc.shots.filter((s) => !isExpired(s));
+      this.store.put(inc);
+      for (const s of gone) out.push({ incidentId: inc.id, shotId: s.id });
+    }
+    return out;
+  }
+
+  /** Entfernt alle Verweise in allen Incidents (Dateien löscht der Aufrufer). */
+  clearAllShotRefs(): number {
+    let n = 0;
+    for (const inc of this.store.incidents()) {
+      if (!inc.shots.length) continue;
+      n += inc.shots.length;
+      inc.shots = [];
+      this.store.put(inc);
+    }
+    return n;
   }
 
   // ---------- Liste und Verwaltung ----------

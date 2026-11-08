@@ -30,6 +30,7 @@ const fileSchema = z.object({
   callShortcut: z.boolean().default(true),
   activityPill: z.boolean().default(true),
   autoAdvance: z.boolean().default(false),
+  shotRetentionDays: z.number().int().min(1).max(3650).default(30),
   costWarnEur: z.number().min(0).nullable().default(null),
   costLimitEur: z.number().min(0).nullable().default(null),
   costIncidentLimitEur: z.number().min(0).nullable().default(null),
@@ -106,6 +107,9 @@ export class SettingsStore {
   priceOverrides(): Record<string, Price> {
     return this.data.priceOverrides;
   }
+  get shotRetentionDays(): number {
+    return this.data.shotRetentionDays;
+  }
   get failedThreshold(): number {
     return this.data.failedThreshold;
   }
@@ -166,6 +170,7 @@ export class SettingsStore {
     if (patch.callShortcut !== undefined) this.data.callShortcut = patch.callShortcut;
     if (patch.activityPill !== undefined) this.data.activityPill = patch.activityPill;
     if (patch.autoAdvance !== undefined) this.data.autoAdvance = patch.autoAdvance;
+    if (patch.shotRetentionDays !== undefined) this.data.shotRetentionDays = num(patch.shotRetentionDays, 1, 3650, 'Aufbewahrungsfrist');
     const costKeys = ['costWarnEur', 'costLimitEur', 'costIncidentLimitEur', 'costPeriod', 'usdEurRate'] as const;
     if (costKeys.some((k) => patch[k] !== undefined)) {
       const next = { ...this.costConfig() };
@@ -202,6 +207,7 @@ export class SettingsStore {
       callShortcutLabel: 'Strg+Alt+T',
       activityPill: this.data.activityPill,
       autoAdvance: this.data.autoAdvance,
+      shotRetentionDays: this.data.shotRetentionDays,
       costWarnEur: this.data.costWarnEur,
       costLimitEur: this.data.costLimitEur,
       costIncidentLimitEur: this.data.costIncidentLimitEur,

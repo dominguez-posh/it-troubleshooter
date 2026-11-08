@@ -140,6 +140,7 @@ export function buildSummaryText(req: SummaryRequest): string {
     ...historyLines(req.history),
     ...noteLines(req.notes),
     `Ergebnis: ${req.result === 'solved' ? 'gelöst' : 'nicht gelöst/abgebrochen'}`,
+    ...(req.purpose === 'doc' ? ['Aufgabe: Beschreibe für die Dokumentation in 2 bis 5 Sätzen die Ursache (falls erkennbar) und die Lösung bzw. den Stand.'] : []),
   ].join('\n');
 }
 
