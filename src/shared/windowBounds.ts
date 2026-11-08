@@ -1,7 +1,7 @@
 import { clamp, type Rect } from './coords';
 
-export const CHAT_DEFAULT_SIZE = { width: 340, height: 210 };
-export const CHAT_MIN_SIZE = { width: 260, height: 160 };
+export const CHAT_DEFAULT_SIZE = { width: 360, height: 300 };
+export const CHAT_MIN_SIZE = { width: 300, height: 240 };
 const MARGIN = 16;
 const TITLE_STRIP = 32;
 

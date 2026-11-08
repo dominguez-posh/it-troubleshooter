@@ -1,0 +1,57 @@
+/* Gemeinsame Bausteine: Typografie, Buttons, Karten, "Jetzt tun"-Karte, Hinweise. Nutzt nur Variablen aus tokens.css. */
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: var(--fs-body)/1.5 var(--font); }
+[hidden] { display: none !important; }
+h1, h2, h3, p { margin: 0; }
+
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+.hint { font-size: var(--fs-small); color: var(--muted); }
+.warn { font-size: var(--fs-small); color: var(--wait); background: var(--wait-bg); border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); }
+.good { color: var(--good); }
+
+.btn {
+  font: inherit; font-weight: 600; min-height: var(--tap); padding: 0 var(--space-2);
+  color: var(--text); background: var(--surface); border: 2px solid var(--line); border-radius: var(--radius-sm); cursor: pointer;
+}
+.btn:hover:not(:disabled) { border-color: var(--accent); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn.primary { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+.btn.small { min-height: 36px; font-size: var(--fs-small); }
+.btn.link { min-height: var(--tap); border-color: transparent; background: transparent; color: var(--accent); text-decoration: underline; padding: 0 var(--space-1); }
+.btn.question { display: block; width: 100%; text-align: left; font-weight: 500; margin-top: var(--space-1); }
+.btn.question.done { opacity: 0.6; }
+.row { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; margin-top: var(--space-2); }
+
+input[type="text"], input[type="password"], input[type="number"], select, textarea {
+  font: inherit; color: var(--text); background: var(--surface); border: 2px solid var(--line); border-radius: var(--radius-sm);
+  min-height: var(--tap); padding: var(--space-1) 12px; width: 100%;
+}
+textarea { resize: vertical; }
+label.check { display: flex; gap: var(--space-1); align-items: center; min-height: var(--tap); font-weight: 500; }
+input[type="checkbox"], input[type="radio"] { width: 24px; height: 24px; accent-color: var(--accent); }
+
+/* ---- "Jetzt tun"-Karte ---- */
+.eyebrow { font-size: var(--fs-small); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.headline { font-size: var(--fs-head); line-height: 1.25; font-weight: 700; margin-top: var(--space-1); }
+.hero .hint, .hero .warn { margin-top: var(--space-1); }
+.commands { margin-top: var(--space-2); }
+.commands code { display: block; margin: 4px 0; padding: var(--space-1); background: var(--surface-2); border-radius: var(--radius-sm); font: 14px Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
+.cmd-head { font-size: var(--fs-small); font-weight: 600; }
+.cmd-head.changing { color: var(--wait); }
+.cmd-head.readonly { color: var(--good); }
+
+details.more { margin-top: var(--space-2); }
+details.more summary { cursor: pointer; min-height: var(--tap); display: flex; align-items: center; color: var(--accent); font-weight: 600; }
+details.more > :not(summary) { margin-top: var(--space-1); }
+
+.alert { border: 2px solid var(--bad); background: var(--bad-bg); border-radius: var(--radius); padding: var(--space-2); margin-bottom: var(--space-2); }
+.alert-title { font-weight: 700; color: var(--bad); }
+
+/* ---- Status-Plakette: Farbe UND Symbol UND Text ---- */
+.pill { display: inline-flex; gap: 6px; align-items: center; border-radius: 999px; padding: 2px 12px; font-size: var(--fs-small); font-weight: 600; border: 2px solid var(--line); }
+.pill.neutral { color: var(--muted); }
+.pill.info { color: var(--info); background: var(--info-bg); border-color: var(--info); }
+.pill.wait { color: var(--wait); background: var(--wait-bg); border-color: var(--wait); }
+.pill.good { color: var(--good); background: var(--good-bg); border-color: var(--good); }
+.pill.bad { color: var(--bad); background: var(--bad-bg); border-color: var(--bad); }

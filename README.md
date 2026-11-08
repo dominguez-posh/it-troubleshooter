@@ -5,6 +5,23 @@ gibt eine Hauptempfehlung ("Jetzt tun"): Kunden fragen, ohne Fernwartung lösen,
 Serverzugriff klären oder – erst wenn Fernwartung wirklich nötig ist – Schritt für Schritt per Pfeil-Overlay auf dem Bildschirm zeigen,
 wo geklickt werden soll.
 
+## So sieht die Oberfläche aus
+
+Eine Sache pro Bildschirm, eine Hauptaktion:
+
+1. **Startbildschirm:** ein großes Feld "Was ist das Problem?" und ein großer Button **"Los geht's"**; klein daneben "Telefonat mit Kunden"
+   und "Offene Fälle". Links stehen deine Fälle als Karten (Titel, Status mit Symbol, "zuletzt vor 5 Minuten").
+2. **Fall:** oben ein Fortschritt in vier Schritten (*Problem beschreiben, Klären, Gemeinsam lösen, Abschließen*) und ein Satz "Wo bin ich? Was soll
+   ich jetzt tun?". In der Mitte die **"Jetzt tun"-Karte** mit der einen Anweisung und höchstens zwei Buttons (*Erledigt*, *Hat nicht geklappt*) sowie
+   dem Link *Anderer Vorschlag*. Begründung und Alternativen stehen unter *Mehr Details*.
+3. **Mini-Fenster:** Status in Worten, die Anweisung groß, die zwei Buttons und ein Eingabefeld "Notiz oder Info für die KI". Alles andere unter *Mehr*.
+4. **Einfach und Erweitert:** Standard ist *Einfach*. Modelle, Kosten-Details, Token, Aktivitätsprotokoll, Auto-Weiter, Bildqualität, Preise und
+   Wechselkurs erscheinen nur im *Erweiterten Modus* (Einstellungen).
+5. **Willkommens-Assistent** beim ersten Start (überspringbar, erscheint nur einmal): KI-Anbieter oder Testmodus, Datenschutz in zwei Sätzen,
+   optionale Kostenwarnung, Testlauf in etwa 30 Sekunden.
+
+Details, Begriffsliste, Ablauf der Bildschirme und die Usability-Checkliste stehen in [docs/UX.md](docs/UX.md).
+
 ## Starten und Bauen
 
 Voraussetzungen: Windows 10/11, Node.js 24.
@@ -53,7 +70,7 @@ Zugriff beim Kunden anfragen, der Kunde führt aus oder Eskalation.
 
 - Jeder Fall wird lokal als Incident gespeichert (`incidents.json` in `%APPDATA%\IT-Troubleshooter`, mit Schema-Version und Migration,
   atomares Schreiben; defekte oder zu neue Dateien werden beiseitegelegt statt überschrieben). **Keine Screenshots, keine API-Keys** im Incident.
-- Liste (Tab *Incidents*): Suche, Filter nach Status, Sortierung, Spalten Titel, Status, zuletzt geändert, Dauer, Kosten (Schätzung).
+- Fälle (Seitenleiste, als Karten): Suche, Filter nach Status, Sortierung; jede Karte zeigt Titel, Status (Symbol, Farbe und Text) und "zuletzt vor ...".
   Aktionen: öffnen, wieder aufnehmen, abschließen, löschen (mit Bestätigung), Status manuell übersteuern, Dauer korrigieren.
 - Status (automatisch aus dem Ablauf): Entwurf, Telefonat, Triage, Rückfrage offen, Fernwartung läuft, Pausiert, Gelöst, Nicht gelöst
   (mit Zusatzinfo wie "Schritt 4, letzter Schritt: ..."). Wird die App während einer Sitzung beendet oder stürzt ab, kommt der Fall als
@@ -171,7 +188,7 @@ manuell. Standard bleibt Schritt für Schritt mit Bestätigung.
 
 ## Tests und Selbsttest
 
-`npm test` (Vitest, 166 Tests) deckt u. a. Schema-Validierung aller Aktionen, Routing/Eskalation, Kosten/Limits, Incident-Speicher mit Migration,
+`npm test` (Vitest, 239 Tests) deckt u. a. Schema-Validierung aller Aktionen, Routing/Eskalation, Kosten/Limits, Incident-Speicher mit Migration,
 Statusmaschine, Zeitmessung (Fake-Zeit), CSV-Export, Aktivitätszustände, Bildvergleich/Auto-Weiter und den Sitzungsablauf mit Mock ab.
 
 **Wichtig – keine echte Bildschirmaufnahme in Tests:** Tests und der Selbsttest nutzen eine **simulierte Aufnahmequelle** (Fake-Frames). Der
@@ -182,6 +199,9 @@ ausdrücklichem Opt-in (`ITT_SELFTEST_CAPTURE=1`) und nur mit Erlaubnis des Nutz
 npm run build
 $env:ITT_SELFTEST = "1"; $env:ITT_SELFTEST_OUT = "$PWD\dist\selftest.json"; npx electron .
 ```
+
+Mit `ITT_SELFTEST_SHOTS=<Ordner>` rendert der Selbsttest zusätzlich die **eigenen App-Fenster** (`webContents.capturePage`, nie der Desktop) mit Mock-Daten
+als PNG in diesen Ordner, um Layout und Texte zu prüfen. Bitte den Ordner danach löschen.
 
 ## Aufbau
 

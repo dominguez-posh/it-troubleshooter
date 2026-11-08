@@ -5,6 +5,7 @@ await rm('dist', { recursive: true, force: true });
 await mkdir('dist/renderer', { recursive: true });
 await mkdir('dist/overlay', { recursive: true });
 await mkdir('dist/chat', { recursive: true });
+await mkdir('dist/ui', { recursive: true });
 
 const common = { bundle: true, sourcemap: false, logLevel: 'warning' };
 
@@ -45,4 +46,6 @@ await cp('src/renderer/styles.css', 'dist/renderer/styles.css');
 await cp('src/overlay/overlay.html', 'dist/overlay/overlay.html');
 await cp('src/chat/chat.html', 'dist/chat/chat.html');
 await cp('src/chat/chat.css', 'dist/chat/chat.css');
+await cp('src/ui/tokens.css', 'dist/ui/tokens.css');
+await cp('src/ui/base.css', 'dist/ui/base.css');
 console.log('Build fertig: dist/');
