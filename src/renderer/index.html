@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>IT-Troubleshooter</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="top">
+      <h1>IT-Troubleshooter</h1>
+      <div class="top-info">
+        <span id="provider-badge" class="badge"></span>
+        <button id="btn-settings" class="btn ghost" type="button">Einstellungen</button>
+      </div>
+    </header>
+
+    <main>
+      <p class="notice" id="privacy-note">
+        Hinweis: Bei jedem Schritt wird ein Screenshot der gewählten Quelle an den eingestellten Anbieter gesendet. Screenshots werden nicht auf der
+        Festplatte gespeichert. Bitte nur Inhalte freigeben, die der Anbieter sehen darf.
+      </p>
+
+      <div id="status" class="status" role="status" aria-live="polite" hidden></div>
+
+      <section id="setup-panel" class="card">
+        <h2>1. Problem und Quelle</h2>
+        <label for="problem">Was ist das Problem?</label>
+        <textarea id="problem" rows="4" maxlength="4000" placeholder="z. B. Outlook startet nicht und zeigt eine Fehlermeldung an."></textarea>
+
+        <div class="row-between">
+          <label>Was soll mitgesehen werden?</label>
+          <button id="btn-refresh-sources" class="btn ghost small" type="button">Liste aktualisieren</button>
+        </div>
+        <div id="sources" class="sources" role="radiogroup" aria-label="Aufnahmequelle"></div>
+        <p id="sources-empty" class="muted" hidden>Keine Quellen gefunden.</p>
+
+        <div class="actions">
+          <button id="btn-start" class="btn primary" type="button">Hilfe starten</button>
+        </div>
+      </section>
+
+      <section id="session-panel" class="card" hidden>
+        <div class="row-between">
+          <h2 id="step-heading">Nächster Schritt</h2>
+          <button id="btn-reset" class="btn ghost small" type="button">Neu beginnen</button>
+        </div>
+        <p class="muted" id="problem-echo"></p>
+
+        <div id="step-box" class="step-box">
+          <p id="step-text" class="step-text"></p>
+          <p id="step-reason" class="muted"></p>
+          <p id="step-notarget" class="muted" hidden>Dieser Schritt hat keinen Pfeil auf dem Bildschirm.</p>
+        </div>
+
+        <label for="comment">Kommentar (optional, z. B. was stattdessen zu sehen ist)</label>
+        <input id="comment" type="text" maxlength="500" autocomplete="off" />
+
+        <div class="actions">
+          <button id="btn-done" class="btn primary" type="button">Erledigt / Weiter</button>
+          <button id="btn-failed" class="btn" type="button">Hat nicht geklappt</button>
+          <button id="btn-show" class="btn ghost" type="button">Pfeil ausblenden</button>
+          <button id="btn-solved" class="btn success" type="button">Problem gelöst</button>
+        </div>
+      </section>
+
+      <section id="solved-panel" class="card solved" hidden>
+        <h2>Problem gelöst</h2>
+        <p>Die Sitzung ist abgeschlossen. Unten sehen Sie den Verlauf.</p>
+        <div class="actions"><button id="btn-new" class="btn primary" type="button">Neues Problem</button></div>
+      </section>
+
+      <section id="history-panel" class="card" hidden>
+        <h2>Verlauf</h2>
+        <ol id="history-list" class="history"></ol>
+      </section>
+    </main>
+
+    <dialog id="settings-dialog">
+      <form method="dialog" class="dialog-body" id="settings-form">
+        <h2>Einstellungen</h2>
+
+        <label for="provider-select">Anbieter</label>
+        <select id="provider-select"></select>
+
+        <label for="model-input">Modell</label>
+        <div class="row">
+          <input id="model-input" type="text" list="model-list" autocomplete="off" spellcheck="false" />
+          <datalist id="model-list"></datalist>
+          <button id="btn-load-models" class="btn small" type="button">Modelle laden</button>
+        </div>
+
+        <div id="key-block">
+          <label for="key-input">API-Key</label>
+          <div class="row">
+            <input id="key-input" type="password" autocomplete="off" spellcheck="false" placeholder="Neuen Key einfügen" />
+            <button id="btn-save-key" class="btn small" type="button">Speichern</button>
+            <button id="btn-clear-key" class="btn small" type="button">Löschen</button>
+          </div>
+          <p id="key-state" class="muted"></p>
+          <p id="enc-warning" class="error-text" hidden>
+            Sichere Verschlüsselung ist auf diesem System nicht verfügbar. Keys können nicht gespeichert werden.
+          </p>
+        </div>
+
+        <label class="check"><input id="chk-exclude" type="checkbox" /> Dieses Fenster aus Aufnahmen ausblenden</label>
+
+        <div id="settings-status" class="status" hidden></div>
+        <div class="actions"><button id="btn-close-settings" class="btn primary" value="close">Schließen</button></div>
+      </form>
+    </dialog>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>
