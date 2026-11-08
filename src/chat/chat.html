@@ -3,30 +3,33 @@
   <head>
     <meta charset="utf-8" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
-    <title>IT-Troubleshooter Chat</title>
+    <title>IT-Troubleshooter Mini-Fenster</title>
+    <link rel="stylesheet" href="../ui/tokens.css" />
+    <link rel="stylesheet" href="../ui/base.css" />
     <link rel="stylesheet" href="chat.css" />
   </head>
   <body>
     <header id="title" class="title">
-      <span class="name">Begleit-Chat</span>
-      <span id="cost" class="cost" title="Geschätzte Kosten (Schätzung, keine Rechnung)"></span>
+      <span class="name">Mini-Fenster</span>
       <span class="btns">
-        <button id="b-call" type="button" title="Jetzt Telefonat mit Kunden (Strg+Alt+T)">☎</button>
-        <button id="b-hist" type="button" title="Verlauf ein-/ausklappen" aria-expanded="false">≡</button>
-        <button id="b-close" type="button" title="Schließen">✕</button>
+        <button id="b-hist" class="btn small" type="button" aria-expanded="false" title="Zeigt den Verlauf und weitere Optionen">Mehr</button>
+        <button id="b-close" class="btn small" type="button" title="Schließt dieses Fenster. Der Fall läuft weiter.">Schließen</button>
       </span>
     </header>
     <div id="status" class="status" role="status" aria-live="polite"></div>
-    <main id="card" class="card"></main>
-    <section id="hist" class="hist" hidden></section>
+    <main id="card" class="hero" aria-live="polite"></main>
     <form id="form" class="form">
-      <textarea id="input" rows="1" maxlength="1000" placeholder="Zusatzinfo (Enter sendet)" aria-label="Zusatzinfo"></textarea>
-      <button id="send" type="submit">➤</button>
+      <label class="sr" for="input">Notiz oder Info für die KI</label>
+      <textarea id="input" rows="1" maxlength="1000" placeholder="Notiz oder Info für die KI"></textarea>
+      <button id="send" class="btn" type="submit">Senden</button>
     </form>
-    <footer class="foot">
-      <label><input id="reeval" type="checkbox" /> Sofort neu bewerten</label>
-      <span class="hint" title="Alt+Pfeile verschiebt, Alt+Umschalt+Pfeile ändert die Größe">Alt+Pfeile: Fenster</span>
-    </footer>
+    <section id="hist" class="hist" hidden>
+      <button id="b-call" class="btn small" type="button" title="Startet ein Telefonat: Du bekommst sofort Fragen für den Kunden.">Telefonat mit Kunden</button>
+      <label class="check"><input id="reeval" type="checkbox" /> Neue Notizen sofort berücksichtigen</label>
+      <h3>Verlauf</h3>
+      <div id="hist-list"></div>
+      <p class="hint">Fenster bewegen: Alt+Pfeiltasten. Größe ändern: Alt+Umschalt+Pfeiltasten.</p>
+    </section>
     <script src="chat.js"></script>
   </body>
 </html>

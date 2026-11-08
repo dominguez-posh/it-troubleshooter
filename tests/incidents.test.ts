@@ -392,18 +392,18 @@ describe('Fensterposition und Verlauf', () => {
     expect(validateChatBounds({ x: 100, y: 100, width: 10, height: 10 }, wa, wa[0]!)).toMatchObject({ width: CHAT_MIN_SIZE.width, height: CHAT_MIN_SIZE.height });
   });
   it('Position auf abgestecktem Monitor fällt auf die Standardposition zurück', () => {
-    const r = validateChatBounds({ x: 5000, y: 100, width: 340, height: 210 }, wa, wa[0]!);
+    const r = validateChatBounds({ x: 5000, y: 100, width: 360, height: 300 }, wa, wa[0]!);
     expect(r).toEqual(defaultChatBounds(wa[0]!));
   });
   it('Fenster zweiter Monitor ist gültig; ungültige Daten -> Standard', () => {
-    expect(validateChatBounds({ x: 2000, y: 50, width: 340, height: 210 }, wa, wa[0]!).x).toBe(2000);
+    expect(validateChatBounds({ x: 2000, y: 50, width: 360, height: 300 }, wa, wa[0]!).x).toBe(2000);
     expect(validateChatBounds({ x: NaN }, wa, wa[0]!)).toEqual(defaultChatBounds(wa[0]!));
     expect(validateChatBounds(null, wa, wa[0]!)).toEqual(defaultChatBounds(wa[0]!));
   });
   it('Standardgröße ist kompakt', () => {
     const d = defaultChatBounds(wa[0]!);
     expect(d.width).toBeLessThanOrEqual(360);
-    expect(d.height).toBeLessThanOrEqual(260);
+    expect(d.height).toBeLessThanOrEqual(300);
   });
   it('Verlauf und Zusatzinfo werden chronologisch zusammengeführt', () => {
     const t = buildTimeline({

@@ -1,8 +1,7 @@
 import { describeActivity } from '../shared/activityText';
-import { formatEurShort } from '../shared/format';
 import { buildTimeline } from '../shared/timeline';
 import type { ChatApi, Result, SessionView } from '../shared/types';
-import { renderCard, type CardHandlers } from '../ui/card';
+import { renderHero, type CardHandlers } from '../ui/hero';
 
 declare global {
   interface Window {
@@ -25,9 +24,8 @@ function apply(r: Result<SessionView>): void {
   if (r.ok) {
     view = r.value;
     render();
-  } else if (view) {
+  } else {
     $('status').textContent = r.error.message;
-    $('status').className = 'status error';
   }
 }
 
@@ -55,14 +53,19 @@ const handlers: CardHandlers = {
 };
 
 function renderHistory(): void {
-  const h = $('hist');
+  const h = $('hist-list');
   h.replaceChildren();
   if (!view) return;
   const ol = document.createElement('ol');
   for (const it of buildTimeline(view).slice(-8)) {
     const li = document.createElement('li');
     li.className = it.kind === 'note' ? 'note' : it.outcome === 'failed' ? 'fail' : '';
-    li.textContent = it.kind === 'note' ? `Info: ${it.text}` : `${it.text} (${it.outcome === 'done' ? 'ok' : 'nicht geklappt'})`;
+    li.textContent = it.kind === 'note' ? `Info: ${it.text}` : `${it.text} (${it.outcome === 'done' ? 'erledigt' : 'hat nicht geklappt'})`;
+    ol.append(li);
+  }
+  if (!ol.children.length) {
+    const li = document.createElement('li');
+    li.textContent = 'Noch nichts passiert.';
     ol.append(li);
   }
   h.append(ol);
@@ -71,19 +74,14 @@ function renderHistory(): void {
 function render(): void {
   if (!view) return;
   const a = describeActivity(view.activity, Date.now());
-  const s = $('status');
   const c = view.cost;
-  let costText = '';
-  if (c.level === 'limit') costText = 'Limit erreicht – pausiert';
-  else if (c.level !== 'ok') costText = `Warnung: ${formatEurShort(c.periodEur)} von ${c.limitEur !== null ? formatEurShort(c.limitEur) : formatEurShort(c.warnEur ?? 0)}`;
-  const overall = costText && a.tone === 'idle' ? { icon: '€', text: costText, tone: 'warn' as const } : a;
-  s.textContent = `${overall.icon} ${overall.text}`;
-  s.className = `status ${overall.tone === 'idle' ? '' : overall.tone === 'busy' ? 'busy' : overall.tone}`;
-  $('cost').textContent = view.incidentId ? `~${formatEurShort(c.incidentEur)} (Schätzung)` : '';
-  renderCard($('card'), view, handlers);
+  const costText = c.level === 'limit' ? 'Kostenlimit erreicht – Pause' : c.level !== 'ok' ? 'Hinweis: Kosten prüfen' : '';
+  const plain = view.activity.kind === 'please_click' ? 'Du bist dran: bitte klicken' : a.text;
+  $('status').textContent = costText && a.tone === 'idle' ? costText : view.incidentId ? plain : 'Kein Fall offen';
+  renderHero($('card'), view, handlers, { compact: true, advanced: false });
   if (expanded) renderHistory();
-  $<HTMLTextAreaElement>('input').disabled = !view.incidentId || view.result !== null;
-  $<HTMLInputElement>('b-call').hidden = !!view.call;
+  input.disabled = !view.incidentId || view.result !== null;
+  $('b-call').hidden = !!view.call;
 }
 
 async function send(): Promise<void> {
@@ -103,6 +101,7 @@ function toggleHistory(on: boolean): void {
   expanded = on;
   $('hist').hidden = !on;
   $('b-hist').setAttribute('aria-expanded', String(on));
+  $('b-hist').textContent = on ? 'Weniger' : 'Mehr';
   if (on) renderHistory();
   void api.setHistoryExpanded(on);
 }
@@ -130,7 +129,7 @@ window.addEventListener('keydown', (e) => {
   e.preventDefault();
   void api.moveWindow({ mode: e.shiftKey ? 'resize' : 'move', dx: v[0], dy: v[1] });
 });
-// Verlauf klappt zu, sobald das Fenster den Fokus verliert (zurück auf Minimalgröße).
+// Der Verlauf klappt zu, sobald das Fenster den Fokus verliert (zurück auf Minimalgröße).
 window.addEventListener('blur', () => {
   if (expanded) toggleHistory(false);
 });
@@ -139,7 +138,6 @@ api.onSessionChanged((v) => {
   render();
 });
 api.onFocusInput(() => input.focus());
-// Sekundenzähler der Statuszeile
 setInterval(() => {
   if (view && view.activity.kind !== 'idle') render();
 }, 1000);

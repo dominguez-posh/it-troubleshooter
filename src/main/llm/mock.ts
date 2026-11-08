@@ -12,9 +12,9 @@ interface Scripted {
 
 /** Feste Schrittfolge relativ zur Bildgröße, damit Demo und Tests ohne Key und deterministisch laufen. */
 export const MOCK_SCRIPT: Scripted[] = [
-  { text: 'Klicken Sie unten links auf das Startmenü.', reason: 'Von dort erreichen Sie die Einstellungen.', fx: 0.03, fy: 0.97 },
-  { text: 'Öffnen Sie die Einstellungen (Zahnrad).', reason: 'Dort liegen die Netzwerkoptionen.', fx: 0.5, fy: 0.5 },
-  { text: 'Wählen Sie „Netzwerk und Internet“.', reason: 'Hier sehen Sie den Verbindungsstatus.', fx: 0.75, fy: 0.3 },
+  { text: 'Klicke unten links auf das Startmenü.', reason: 'Von dort erreichen Sie die Einstellungen.', fx: 0.03, fy: 0.97 },
+  { text: 'Öffne die Einstellungen (Zahnrad).', reason: 'Dort liegen die Netzwerkoptionen.', fx: 0.5, fy: 0.5 },
+  { text: 'Wähle „Netzwerk und Internet“.', reason: 'Hier sehen Sie den Verbindungsstatus.', fx: 0.75, fy: 0.3 },
 ];
 
 export const MOCK_CALL_QUESTIONS = [
@@ -42,10 +42,10 @@ function decide(req: RecommendRequest, tier: string): Recommendation {
   if (req.imageSize) {
     const { width, height } = req.imageSize;
     if (p.includes('neustart') && req.history.length >= 2) {
-      return { action: 'answer_directly', instruction: 'Sagen Sie dem Kunden, er soll den Rechner neu starten.', reason: 'Ein Neustart behebt das ohne weitere Klicks.', steps: ['Speichern und Programme schließen', 'Neu starten'], risk: 'Ungespeicherte Arbeit geht verloren.' };
+      return { action: 'answer_directly', instruction: 'Sag dem Kunden, er soll den Rechner neu starten.', reason: 'Ein Neustart behebt das ohne weitere Klicks.', steps: ['Speichern und Programme schließen', 'Neu starten'], risk: 'Ungespeicherte Arbeit geht verloren.' };
     }
     if (req.history.length >= MOCK_SCRIPT.length) {
-      return { action: 'close', instruction: 'Prüfen Sie, ob das Problem behoben ist, und schließen Sie den Fall ab.', reason: 'Alle geplanten Schritte sind erledigt.', result: 'solved' };
+      return { action: 'close', instruction: 'Prüfe, ob das Problem behoben ist, und schließe den Fall ab.', reason: 'Alle geplanten Schritte sind erledigt.', result: 'solved' };
     }
     const s = MOCK_SCRIPT[req.history.length]!;
     return {
@@ -58,25 +58,25 @@ function decide(req: RecommendRequest, tier: string): Recommendation {
   }
 
   if (req.prefer === 'question') {
-    return { action: 'ask_customer', instruction: 'Fragen Sie den Kunden, seit wann das Problem besteht.', reason: 'Der Zeitpunkt grenzt die Ursache ein.', options: ['Seit dem Update', 'Schon länger', 'Weiß nicht'] };
+    return { action: 'ask_customer', instruction: 'Frage den Kunden, seit wann das Problem besteht.', reason: 'Der Zeitpunkt grenzt die Ursache ein.', options: ['Seit dem Update', 'Schon länger', 'Weiß nicht'] };
   }
   if (last?.response === 'other') {
-    return { action: 'ask_customer', instruction: 'Fragen Sie den Kunden, was genau gegen den Vorschlag spricht.', reason: 'Der Vorschlag wurde abgelehnt, der Grund fehlt.' };
+    return { action: 'ask_customer', instruction: 'Frage den Kunden, was genau gegen den Vorschlag spricht.', reason: 'Der Vorschlag wurde abgelehnt, der Grund fehlt.' };
   }
   if (last?.action === 'answer_directly' && last.response === 'done') {
-    return { action: 'close', instruction: 'Schließen Sie den Fall ab, wenn der Kunde bestätigt, dass es läuft.', reason: 'Die Lösung wurde weitergegeben.', result: 'solved' };
+    return { action: 'close', instruction: 'Schließe den Fall ab, wenn der Kunde bestätigt, dass es läuft.', reason: 'Die Lösung wurde weitergegeben.', result: 'solved' };
   }
   if (p.includes('server')) {
     const acc = req.serverAccess;
     if (!acc || acc.state === 'unclear') {
-      return { action: 'check_server_access', instruction: 'Fragen Sie den Kunden, ob wir Zugriff auf den Server haben (RDP, SSH oder Webkonsole).', reason: 'Die Symptome deuten auf den Server; ohne Zugriff lohnt kein Prüfplan.', accessKinds: ['rdp', 'ssh', 'web'] };
+      return { action: 'check_server_access', instruction: 'Frage den Kunden, ob ihr Zugriff auf den Server habt (RDP, SSH oder Webkonsole).', reason: 'Die Symptome deuten auf den Server; ohne Zugriff lohnt kein Prüfplan.', accessKinds: ['rdp', 'ssh', 'web'] };
     }
     if (acc.state === 'no') {
-      return { action: 'contact_customer', instruction: 'Bitten Sie den Kunden um Serverzugriff oder lassen Sie ihn die Prüfung selbst ausführen.', reason: 'Ohne Zugriff kann nur der Kunde prüfen.', talkingPoints: ['Zugriff anfragen', 'Alternativ: Kunde führt Befehle selbst aus'] };
+      return { action: 'contact_customer', instruction: 'Bitte den Kunden um Serverzugriff oder lass ihn die Prüfung selbst ausführen.', reason: 'Ohne Zugriff kann nur der Kunde prüfen.', talkingPoints: ['Zugriff anfragen', 'Alternativ: Kunde führt Befehle selbst aus'] };
     }
     return {
       action: 'answer_directly',
-      instruction: 'Prüfen Sie zuerst Dienststatus und Speicherplatz auf dem Server.',
+      instruction: 'Prüfe zuerst Dienststatus und Speicherplatz auf dem Server.',
       reason: 'Häufige Ursachen lassen sich mit Nur-Lesen-Befehlen eingrenzen.',
       risk: 'Nur lesende Befehle zuerst; ändernde erst nach Backup.',
       commands: [
@@ -86,21 +86,21 @@ function decide(req: RecommendRequest, tier: string): Recommendation {
     };
   }
   if (p.includes('passwort')) {
-    return { action: 'answer_directly', instruction: 'Nennen Sie dem Kunden den Weg zum Passwort-Reset im Self-Service-Portal.', reason: 'Das lässt sich ohne Fernwartung lösen.', steps: ['Portal öffnen', '„Passwort vergessen“ wählen', 'Link in der E-Mail folgen'] };
+    return { action: 'answer_directly', instruction: 'Nenne dem Kunden den Weg zum Passwort-Reset im Self-Service-Portal.', reason: 'Das lässt sich ohne Fernwartung lösen.', steps: ['Portal öffnen', '„Passwort vergessen“ wählen', 'Link in der E-Mail folgen'] };
   }
   if (p.includes('rückruf')) {
-    return { action: 'contact_customer', instruction: 'Rufen Sie den Kunden zurück und holen Sie die Freigabe ein.', reason: 'Ohne Zustimmung des Kunden geht es nicht weiter.', talkingPoints: ['Stand schildern', 'Freigabe einholen', 'Zeitfenster vereinbaren'] };
+    return { action: 'contact_customer', instruction: 'Ruf den Kunden zurück und hol die Freigabe ein.', reason: 'Ohne Zustimmung des Kunden geht es nicht weiter.', talkingPoints: ['Stand schildern', 'Freigabe einholen', 'Zeitfenster vereinbaren'] };
   }
   if (p.includes('eskalier')) {
-    return { action: 'escalate', instruction: 'Übergeben Sie den Fall an den 2nd Level.', reason: 'Das Problem liegt außerhalb Ihres Zuständigkeitsbereichs.', handover: `Problem: ${req.problem.slice(0, 200)}. Bisher ${req.history.length} Schritte, ohne Erfolg.`, to: '2nd Level' };
+    return { action: 'escalate', instruction: 'Gib den Fall an die Kollegen vom 2nd Level weiter.', reason: 'Das Problem liegt außerhalb Ihres Zuständigkeitsbereichs.', handover: `Problem: ${req.problem.slice(0, 200)}. Bisher ${req.history.length} Schritte, ohne Erfolg.`, to: '2nd Level' };
   }
   if (p.includes('warten')) {
-    return { action: 'wait_check', instruction: 'Warten Sie fünf Minuten und prüfen Sie dann das Ergebnis.', reason: 'Die Synchronisierung braucht Zeit.', minutes: 5 };
+    return { action: 'wait_check', instruction: 'Warte fünf Minuten und prüfe dann das Ergebnis.', reason: 'Die Synchronisierung braucht Zeit.', minutes: 5 };
   }
   if (p.includes('langsam') && !text.includes('antwort')) {
-    return { action: 'ask_customer', instruction: 'Fragen Sie den Kunden, ob es nur ein Programm oder das ganze System betrifft.', reason: 'Das entscheidet, ob Fernwartung nötig ist.', options: ['Nur ein Programm', 'Ganzes System'] };
+    return { action: 'ask_customer', instruction: 'Frage den Kunden, ob es nur ein Programm oder das ganze System betrifft.', reason: 'Das entscheidet, ob Fernwartung nötig ist.', options: ['Nur ein Programm', 'Ganzes System'] };
   }
-  return { action: 'start_remote', instruction: 'Öffnen Sie jetzt die Fernwartung und lassen Sie sich den Bildschirm zeigen.', reason: 'Das Problem lässt sich nur am Bildschirm klären.', show: 'Das Fenster mit der Fehlermeldung' };
+  return { action: 'start_remote', instruction: 'Öffne jetzt die Fernwartung und lass dir den Bildschirm zeigen.', reason: 'Das Problem lässt sich nur am Bildschirm klären.', show: 'Das Fenster mit der Fehlermeldung' };
 }
 
 export function createMockProvider(ctx: ProviderContext = { getApiKey: () => undefined, getModel: (t) => `mock-${t}` }): LlmProvider {
