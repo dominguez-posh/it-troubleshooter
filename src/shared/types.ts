@@ -399,6 +399,10 @@ export interface SettingsView {
   autoAdvance: boolean;
   /** Aufbewahrungsfrist für Screenshots in Tagen. */
   shotRetentionDays: number;
+  /** Erweiterter Modus (Standard: Einfach). */
+  advancedMode: boolean;
+  /** Willkommens-Assistent wurde abgeschlossen oder übersprungen. */
+  onboardingDone: boolean;
   costWarnEur: number | null;
   costLimitEur: number | null;
   costIncidentLimitEur: number | null;
@@ -424,6 +428,8 @@ export interface SettingsPatch {
   activityPill?: boolean;
   autoAdvance?: boolean;
   shotRetentionDays?: number;
+  advancedMode?: boolean;
+  onboardingDone?: boolean;
   /** null = kein Wert. */
   costWarnEur?: number | null;
   costLimitEur?: number | null;

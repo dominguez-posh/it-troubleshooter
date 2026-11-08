@@ -1,0 +1,62 @@
+/* Design-Tokens an EINER Stelle. Alle Fenster (Hauptfenster, Mini-Fenster) nutzen diese Variablen.
+   Kontraste sind auf WCAG AA ausgelegt (Text >= 4.5:1, große Schrift und Rahmen >= 3:1). Raster: 8 px. */
+:root {
+  color-scheme: light dark;
+
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --tap: 44px; /* Mindestgröße für Klickflächen */
+
+  --fs-body: 16px; /* Fließtext */
+  --fs-small: 14px; /* Hinweise, Beschriftungen (Mindestschrift) */
+  --fs-head: 26px; /* die eine Anweisung */
+  --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --surface-2: #eef2f7;
+  --text: #1a2230;
+  --muted: #475467; /* 7.2:1 auf --surface */
+  --line: #6b7689; /* Rahmen >= 3:1 */
+  --line-soft: #d5dbe5;
+  --accent: #1d4ed8; /* 6.7:1 auf --surface */
+  --on-accent: #ffffff;
+  --focus: #b45309;
+
+  --good: #146c2e;
+  --good-bg: #e3f4e8;
+  --bad: #b42318;
+  --bad-bg: #fde8e6;
+  --wait: #8a4b00;
+  --wait-bg: #fff2d9;
+  --info: #1d4ed8;
+  --info-bg: #e6edff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e131b;
+    --surface: #18202b;
+    --surface-2: #212b39;
+    --text: #eef2f8;
+    --muted: #b4bfd0;
+    --line: #7d8aa0;
+    --line-soft: #2e3a4c;
+    --accent: #8db3ff; /* 8.4:1 auf --surface */
+    --on-accent: #0a1020;
+    --focus: #ffb454;
+
+    --good: #6fdc8c;
+    --good-bg: #17331f;
+    --bad: #ff9a90;
+    --bad-bg: #3d1a17;
+    --wait: #ffc766;
+    --wait-bg: #382a0c;
+    --info: #8db3ff;
+    --info-bg: #1b2a4a;
+  }
+}
