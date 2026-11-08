@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
+    <title>IT-Troubleshooter Chat</title>
+    <link rel="stylesheet" href="chat.css" />
+  </head>
+  <body>
+    <header id="title" class="title">
+      <span class="name">Begleit-Chat</span>
+      <span id="cost" class="cost" title="Geschätzte Kosten (Schätzung, keine Rechnung)"></span>
+      <span class="btns">
+        <button id="b-call" type="button" title="Jetzt Telefonat mit Kunden (Strg+Alt+T)">☎</button>
+        <button id="b-hist" type="button" title="Verlauf ein-/ausklappen" aria-expanded="false">≡</button>
+        <button id="b-close" type="button" title="Schließen">✕</button>
+      </span>
+    </header>
+    <div id="status" class="status" role="status" aria-live="polite"></div>
+    <main id="card" class="card"></main>
+    <section id="hist" class="hist" hidden></section>
+    <form id="form" class="form">
+      <textarea id="input" rows="1" maxlength="1000" placeholder="Zusatzinfo (Enter sendet)" aria-label="Zusatzinfo"></textarea>
+      <button id="send" type="submit">➤</button>
+    </form>
+    <footer class="foot">
+      <label><input id="reeval" type="checkbox" /> Sofort neu bewerten</label>
+      <span class="hint" title="Alt+Pfeile verschiebt, Alt+Umschalt+Pfeile ändert die Größe">Alt+Pfeile: Fenster</span>
+    </footer>
+    <script src="chat.js"></script>
+  </body>
+</html>

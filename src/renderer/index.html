@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>IT-Troubleshooter</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="top">
+      <h1>IT-Troubleshooter</h1>
+      <nav class="tabs" role="tablist">
+        <button id="tab-session" class="tab active" role="tab" type="button">Sitzung</button>
+        <button id="tab-incidents" class="tab" role="tab" type="button">Incidents</button>
+        <button id="tab-time" class="tab" role="tab" type="button">Zeiterfassung</button>
+      </nav>
+      <div class="top-info">
+        <span id="cost-head" class="badge" title="Geschätzte Kosten (Schätzung, keine Rechnung; maßgeblich ist die Abrechnung beim Anbieter)"></span>
+        <span id="provider-badge" class="badge"></span>
+        <button id="btn-call" class="btn small" type="button" title="Jetzt Telefonat mit Kunden (Strg+Alt+T)">☎ Telefonat</button>
+        <button id="btn-chat" class="btn small" type="button">Begleit-Chat</button>
+        <button id="btn-settings" class="btn small" type="button">Einstellungen</button>
+      </div>
+    </header>
+
+    <main>
+      <div id="status" class="status" role="status" aria-live="polite" hidden></div>
+      <div id="cost-banner" class="status warnbar" hidden>
+        <span id="cost-banner-text"></span>
+        <span class="row">
+          <button id="cost-ack" class="btn small" type="button">Verstanden</button>
+          <button id="cost-raise" class="btn small" type="button">Limit anheben …</button>
+          <button id="cost-once" class="btn small" type="button">Einmal fortfahren</button>
+        </span>
+      </div>
+
+      <!-- Sitzung -->
+      <section id="view-session">
+        <p class="notice">
+          Hinweis: Erst wenn Fernwartung nötig ist, wird bei jedem Schritt ein Screenshot der gewählten Quelle an den eingestellten Anbieter gesendet
+          (vorher nicht). Screenshots werden an den Anbieter gesendet UND lokal im Benutzerordner gespeichert (pro Incident abschaltbar,
+          Aufbewahrungsfrist einstellbar). Texte und Verlauf eines Falls liegen lokal im Klartext in Ihrem Benutzerordner. Bitte keine Passwörter eingeben. Kosten werden nur geschätzt.
+        </p>
+
+        <section id="setup-panel" class="card">
+          <h2>Neues Problem</h2>
+          <label for="problem">Was ist das Problem?</label>
+          <textarea id="problem" rows="4" maxlength="4000" placeholder="z. B. Outlook startet nicht und zeigt eine Fehlermeldung an."></textarea>
+          <div class="actions">
+            <button id="btn-start" class="btn primary" type="button">Einschätzen (ohne Screenshot)</button>
+            <button id="btn-start-call" class="btn" type="button">☎ Jetzt Telefonat mit Kunden</button>
+          </div>
+        </section>
+
+        <section id="session-panel" class="card" hidden>
+          <div class="row-between">
+            <h2 id="session-title">Sitzung</h2>
+            <span class="row">
+              <span id="timer" class="badge">0 min</span>
+              <button id="btn-timer" class="btn small" type="button">Zeit pausieren</button>
+              <button id="btn-pause" class="btn small" type="button" title="Sitzung unterbrechen, Fall bleibt offen">Pausieren</button>
+              <button id="btn-solved" class="btn small" type="button">Gelöst</button>
+              <button id="btn-abort" class="btn small" type="button">Abbrechen (nicht gelöst)</button>
+            </span>
+          </div>
+          <p class="muted" id="problem-echo"></p>
+          <div id="card" class="card-inner"></div>
+          <div class="row" id="remote-controls">
+            <button id="btn-remote" class="btn" type="button">Fernwartung mit Aufnahme starten</button>
+            <button id="btn-ask" class="btn" type="button">Doch erst nachfragen</button>
+            <button id="btn-show" class="btn ghost" type="button">Pfeil ausblenden</button>
+          </div>
+          <details id="sources-box">
+            <summary>Aufnahmequelle für die Fernwartung</summary>
+            <div class="row-between"><span class="muted">Ganzer Bildschirm oder einzelnes Fenster (z. B. TeamViewer)</span><button id="btn-refresh-sources" class="btn ghost small" type="button">Liste aktualisieren</button></div>
+            <div id="sources" class="sources" role="radiogroup" aria-label="Aufnahmequelle"></div>
+            <p id="sources-empty" class="muted" hidden>Keine Quellen gefunden.</p>
+          </details>
+          <label for="note">Zusatzinfo / Antwort des Kunden (gehört zum Fall)</label>
+          <div class="row"><input id="note" type="text" maxlength="1000" autocomplete="off" /><button id="btn-note" class="btn small" type="button">Senden</button></div>
+          <p id="req-line" class="muted"></p>
+          <p id="shots-line" class="muted"></p>
+        </section>
+
+        <section id="solved-panel" class="card solved" hidden>
+          <h2 id="solved-title">Fall abgeschlossen</h2>
+          <p>Die Zeiterfassung wird vorbereitet. Unten sehen Sie den Verlauf.</p>
+          <div class="actions"><button id="btn-new" class="btn primary" type="button">Neues Problem</button></div>
+        </section>
+
+        <section id="history-panel" class="card" hidden>
+          <h2>Verlauf</h2>
+          <ol id="history-list" class="history"></ol>
+          <h3>Zusatzinfos</h3>
+          <ul id="notes-list" class="history"></ul>
+        </section>
+
+        <details class="card" id="activity-box">
+          <summary>Aktivitätsprotokoll</summary>
+          <ol id="activity-list" class="history"></ol>
+        </details>
+      </section>
+
+      <!-- Incidents -->
+      <section id="view-incidents" hidden>
+        <div class="card">
+          <div class="filters">
+            <input id="inc-search" type="text" placeholder="Suche in Titel und Text" />
+            <select id="inc-status">
+              <option value="all">Alle Status</option>
+              <option value="open">Offen (nicht abgeschlossen)</option>
+              <option value="draft">Entwurf</option>
+              <option value="call">Telefonat</option>
+              <option value="triage">Triage</option>
+              <option value="waiting">Rückfrage offen</option>
+              <option value="remote">Fernwartung läuft</option>
+              <option value="paused">Pausiert</option>
+              <option value="solved">Gelöst</option>
+              <option value="unsolved">Nicht gelöst</option>
+            </select>
+            <select id="inc-sort">
+              <option value="updated">Zuletzt geändert</option>
+              <option value="created">Erstellt</option>
+              <option value="title">Titel</option>
+              <option value="duration">Dauer</option>
+              <option value="status">Status</option>
+            </select>
+          </div>
+          <table class="table">
+            <thead><tr><th>Titel</th><th>Status</th><th>Zuletzt geändert</th><th>Dauer</th><th>Kosten (Schätzung)</th><th></th></tr></thead>
+            <tbody id="inc-body"></tbody>
+          </table>
+          <p id="inc-empty" class="muted" hidden>Keine Incidents.</p>
+        </div>
+      </section>
+
+      <!-- Zeiterfassung -->
+      <section id="view-time" hidden>
+        <div class="card">
+          <div class="actions">
+            <button id="te-export" class="btn primary" type="button">Auswahl als CSV exportieren</button>
+            <button id="te-transferred" class="btn" type="button">Als übertragen markieren</button>
+            <button id="te-open" class="btn" type="button">Wieder auf offen</button>
+          </div>
+          <table class="table">
+            <thead><tr><th></th><th>Datum</th><th>Dauer</th><th>Incident</th><th>Kunde</th><th>Beschreibung</th><th>Status</th><th></th></tr></thead>
+            <tbody id="te-body"></tbody>
+          </table>
+          <p id="te-empty" class="muted" hidden>Noch keine Einträge.</p>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="settings-dialog">
+      <form method="dialog" class="dialog-body" id="settings-form">
+        <h2>Einstellungen</h2>
+        <label for="provider-select">Anbieter</label>
+        <select id="provider-select"></select>
+        <div id="key-block">
+          <label for="key-input">API-Key</label>
+          <div class="row">
+            <input id="key-input" type="password" autocomplete="off" spellcheck="false" placeholder="Neuen Key einfügen" />
+            <button id="btn-save-key" class="btn small" type="button">Speichern</button>
+            <button id="btn-clear-key" class="btn small" type="button">Löschen</button>
+          </div>
+          <p id="key-state" class="muted"></p>
+          <p id="enc-warning" class="error-text" hidden>Sichere Verschlüsselung ist nicht verfügbar. Keys können nicht gespeichert werden.</p>
+        </div>
+        <h3>Modellwahl: so klein wie möglich, so groß wie nötig</h3>
+        <div class="grid3">
+          <label>klein<input id="tier-small" type="text" list="model-list" /></label>
+          <label>mittel<input id="tier-medium" type="text" list="model-list" /></label>
+          <label>groß<input id="tier-large" type="text" list="model-list" /></label>
+        </div>
+        <datalist id="model-list"></datalist>
+        <button id="btn-load-models" class="btn small" type="button">Modelle laden</button>
+        <div class="grid3">
+          <label>Triage<select id="route-triage"></select></label>
+          <label>Schritt (Screenshot)<select id="route-step"></select></label>
+          <label>Zusammenfassung<select id="route-summary"></select></label>
+          <label>Telefonat<select id="route-call"></select></label>
+          <label>Eskalation nach "nicht geklappt" x<input id="threshold" type="number" min="1" max="5" /></label>
+          <label class="check"><input id="dropback" type="checkbox" /> Nach Eskalation zur Basisstufe zurück</label>
+        </div>
+        <h3>Screenshot (Kontext klein halten)</h3>
+        <div class="grid3">
+          <label>Max. Breite (px)<input id="img-width" type="number" min="800" max="1920" step="40" /></label>
+          <label>JPEG-Qualität<input id="img-quality" type="number" min="40" max="90" /></label>
+        </div>
+        <h3>Kosten und Limits (Schätzung)</h3>
+        <div class="grid3">
+          <label>Warnung ab (€)<input id="cost-warn" type="number" min="0" step="0.5" /></label>
+          <label>Limit (€)<input id="cost-limit" type="number" min="0" step="0.5" /></label>
+          <label>Limit je Incident (€)<input id="cost-inc" type="number" min="0" step="0.5" /></label>
+          <label>Zeitraum<select id="cost-period"><option value="day">pro Tag</option><option value="month">pro Monat</option><option value="total">gesamt</option></select></label>
+          <label>USD-EUR-Kurs (manuell pflegen)<input id="cost-rate" type="number" min="0.1" max="5" step="0.01" /></label>
+          <button id="cost-reset" class="btn small" type="button">Zähler zurücksetzen</button>
+        </div>
+        <p class="muted">Berechnet aus den Usage-Angaben der API und einer lokalen Preistabelle. Das ist eine Schätzung, keine Rechnung.</p>
+        <h3>Screenshots</h3>
+        <div class="grid3">
+          <label>Aufbewahrung (Tage, danach automatisch gelöscht)<input id="shot-days" type="number" min="1" max="3650" /></label>
+          <button id="shots-delete-all" class="btn small" type="button">Alle Screenshots löschen …</button>
+        </div>
+        <p class="muted">Screenshots werden bei Fernwartung an den Anbieter gesendet UND lokal (verschlüsselt, wenn Windows das erlaubt) gespeichert.</p>
+        <h3>Fenster und Bedienung</h3>
+        <label class="check"><input id="chk-exclude" type="checkbox" /> Dieses Fenster aus Aufnahmen ausblenden</label>
+        <label class="check"><input id="chk-chat-shortcut" type="checkbox" /> Globales Kürzel Strg+Alt+Leertaste (Chat fokussieren)</label>
+        <label class="check"><input id="chk-call-shortcut" type="checkbox" /> Globales Kürzel Strg+Alt+T (Telefonat)</label>
+        <label class="check"><input id="chk-pill" type="checkbox" /> Statuspill im Overlay bei längeren Wartezeiten</label>
+        <label class="check"><input id="chk-auto" type="checkbox" /> Auto-Weiter (experimentell): nächster Schritt nach erkanntem Klick, Standard aus</label>
+        <div id="settings-status" class="status" hidden></div>
+        <div class="actions"><button id="btn-close-settings" class="btn primary" value="close">Schließen</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="time-dialog">
+      <form method="dialog" class="dialog-body">
+        <h2>Zeiterfassungs-Eintrag</h2>
+        <p class="muted" id="te-source"></p>
+        <div class="grid3">
+          <label>Datum<input id="td-date" type="text" /></label>
+          <label>Dauer (Min.)<input id="td-min" type="number" min="1" max="1440" /></label>
+          <label>Kunde/Referenz<input id="td-customer" type="text" maxlength="120" /></label>
+        </div>
+        <label for="td-desc">Zusammenfassung (bitte prüfen, keine Passwörter oder sensiblen Daten)</label>
+        <textarea id="td-desc" rows="4" maxlength="1000"></textarea>
+        <p class="muted" id="td-info"></p>
+        <div id="td-status" class="status" hidden></div>
+        <div class="actions">
+          <button id="td-save" class="btn primary" type="button">Speichern</button>
+          <button id="td-skip" class="btn" value="skip">Später / überspringen</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="inc-dialog">
+      <form method="dialog" class="dialog-body">
+        <h2>Incident</h2>
+        <div class="grid3">
+          <label>Titel<input id="id-title" type="text" maxlength="120" /></label>
+          <label>Kunde/Referenz<input id="id-customer" type="text" maxlength="120" /></label>
+          <label>Dauer korrigieren (Min.)<input id="id-minutes" type="number" min="0" /></label>
+        </div>
+        <p class="muted" id="id-meta"></p>
+        <label for="id-notes">Notizen</label>
+        <textarea id="id-notes" rows="3" maxlength="4000"></textarea>
+        <h3>Problem</h3>
+        <p id="id-problem" class="pre"></p>
+        <h3>Verlauf</h3>
+        <ol id="id-history" class="history"></ol>
+        <h3>Zusatzinfos</h3>
+        <ul id="id-infos" class="history"></ul>
+        <h3>Screenshots</h3>
+        <label class="check"><input id="id-store" type="checkbox" /> Screenshots dieses Incidents lokal speichern</label>
+        <p class="muted" id="id-shots-info"></p>
+        <div id="id-shots" class="shots-grid"></div>
+        <div class="row">
+          <button id="id-shots-del" class="btn small" type="button">Screenshots dieses Incidents löschen …</button>
+          <button id="id-doc" class="btn small primary" type="button">Doku erstellen …</button>
+        </div>
+        <h3>Zeitabschnitte</h3>
+        <ul id="id-segments" class="history"></ul>
+        <h3>Wiedereröffnungen</h3>
+        <ul id="id-reopens" class="history"></ul>
+        <div id="id-status" class="status" hidden></div>
+        <div class="actions">
+          <button id="id-save" class="btn" type="button">Speichern</button>
+          <button id="id-resume" class="btn primary" type="button">Wieder aufnehmen</button>
+          <button id="id-solve" class="btn" type="button">Als gelöst abschließen</button>
+          <button id="id-unsolve" class="btn" type="button">Als nicht gelöst abschließen</button>
+          <select id="id-setstatus"></select>
+          <button id="id-delete" class="btn" type="button">Löschen …</button>
+          <button id="id-close" class="btn ghost" value="close">Schließen</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="doc-dialog">
+      <form method="dialog" class="dialog-body">
+        <h2>Doku erstellen</h2>
+        <label for="doc-variant">Variante</label>
+        <select id="doc-variant">
+          <option value="full">Ausführlich (mit Bildern)</option>
+          <option value="short">Kurz-Doku (ohne Bilder)</option>
+          <option value="customer">Kundenfassung (ohne interne Notizen, Modell- und Kosteninfos)</option>
+        </select>
+        <h3>Schritte in der Doku</h3>
+        <div id="doc-steps"></div>
+        <label for="doc-summary">Ursache und Lösung (editierbar, vom Modell nur aus dem Textverlauf erzeugt)</label>
+        <textarea id="doc-summary" rows="5" maxlength="4000"></textarea>
+        <p class="notice">Bitte Screenshots auf sensible Daten prüfen (Passwörter, Kundendaten, Schlüssel). Exportiert wird die geschwärzte Kopie, falls vorhanden.</p>
+        <div id="doc-preview" class="shots-grid"></div>
+        <div id="doc-status" class="status" hidden></div>
+        <div class="actions">
+          <button id="doc-export" class="btn primary" type="button">Exportieren (Markdown und HTML) …</button>
+          <button class="btn ghost" value="close">Schließen</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="red-dialog">
+      <form method="dialog" class="dialog-body">
+        <h2>Schwärzen</h2>
+        <p class="muted">Bereiche mit der Maus aufziehen. Beim Anwenden werden die Pixel in einer Kopie unwiderruflich überschrieben; das Original bleibt unverändert, die Doku nutzt nur die geschwärzte Kopie.</p>
+        <canvas id="red-canvas" aria-label="Screenshot zum Schwärzen"></canvas>
+        <div id="red-status" class="status" hidden></div>
+        <div class="actions">
+          <button id="red-undo" class="btn" type="button">Letzten Bereich entfernen</button>
+          <button id="red-apply" class="btn primary" type="button">Schwärzung anwenden</button>
+          <button class="btn ghost" value="close">Schließen</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="reopen-dialog">
+      <form method="dialog" class="dialog-body">
+        <h2>Fall wieder aufnehmen</h2>
+        <p class="muted">Der Fall ist abgeschlossen. Bitte eine Begründung angeben; sie wird im Verlauf gespeichert und dem Modell als Kontext mitgegeben. Der Bildschirmzustand wird bei Bedarf neu aufgenommen.</p>
+        <label for="ro-reason">Begründung (Pflicht, max. 500 Zeichen)</label>
+        <textarea id="ro-reason" rows="3" maxlength="500"></textarea>
+        <div id="ro-status" class="status" hidden></div>
+        <div class="actions">
+          <button id="ro-ok" class="btn primary" type="button">Wieder aufnehmen</button>
+          <button id="ro-cancel" class="btn" value="cancel">Abbrechen</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>
